@@ -158,6 +158,24 @@ npm run dev
 | `/explorer` | Slot browser, verification history |
 | `/learn` | JAM architecture education |
 
+#### Web Dashboard screenshots
+
+ <!-- Centered -->
+  <p align="center">
+    <img src="./docs/images/HashVerify.png" alt="HashVerify" width="800">
+  </p>
+
+ <!-- Centered -->
+  <p align="center">
+    <img src="./docs/images/Explorer.png" alt="Explorer" width="800">
+  </p>
+
+   <!-- Centered -->
+  <p align="center">
+    <img src="./docs/images/Learn.png" alt="Learn" width="800">
+  </p>
+
+
 ## Future Work: ZK Proof Integration
 
 ### Phase 3 Objectives

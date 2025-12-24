@@ -6,14 +6,19 @@ A minimal JAM (Join-Accumulate Machine) service demonstrating the new Polkadot c
 
 ```
 my-jam-service/
-├── .gitignore          <-- Ignores /target/ and /node_modules/
-├── Cargo.toml          <-- Rust dependencies & Metadata
+├── .gitignore              # Ignores /target/, /node_modules/, etc.
+├── Cargo.toml              # Rust dependencies & metadata
 ├── src/
-│   └── lib.rs          <-- Your JAM service logic
-├── deploy.ts           <-- Your deployment bridge (The "Installer")
-├── package.json        <-- TypeScript dependencies
-├── tsconfig.json       <-- TypeScript configuration
-└── README.md           <-- Instructions on how to build & deploy
+│   └── lib.rs              # JAM service logic (refine + accumulate)
+├── client/                 # TypeScript client tooling
+│   ├── src/
+│   │   ├── submit-proof.ts # Submit work items to the service
+│   │   ├── query-state.ts  # Query service state
+│   │   └── monitor.ts      # Monitor network activity
+│   └── README.md           # Client documentation
+├── my-jam-service.jam      # Compiled PVM blob (after build)
+├── zk-proof-testing-plan.md # Roadmap for ZK integration
+└── README.md
 ```
 
 ## What is JAM?
@@ -153,16 +158,25 @@ Test your service by sending a work item:
 | `jamt inspect` | Get block information |
 | `jamtop` | Real-time monitoring dashboard |
 
-## Alternative: Deploy via TypeScript
+## TypeScript Client
 
-The included `deploy.ts` script provides an alternative deployment method using JSON-RPC.
+The `client/` directory contains TypeScript tooling for interacting with your deployed service.
 
 ```bash
+cd client
 npm install
-npx ts-node deploy.ts
+
+# Query your service
+JAM_SERVICE_ID=0c7bb62b npm run query
+
+# Query specific storage
+JAM_SERVICE_ID=0c7bb62b npm run query -- --key status
+
+# Monitor network
+npm run monitor
 ```
 
-> **Note:** The TypeScript deployer is experimental. The recommended approach is using `jamt create-service` as shown above.
+See [`client/README.md`](./client/README.md) for full documentation.
 
 
 ## Architecture: The Coprocessor Model
@@ -204,6 +218,67 @@ For heavy workloads (like ZK proof aggregation), use JAM as a **verifier**:
 
 ### `#![no_std]` Environment
 JAM services run without the standard library - no filesystem, no networking, no OS. Use `alloc` for dynamic memory.
+
+### Core Verification
+
+  Refine (lines 35-70) - The Heavy Lifting
+
+```
+  fn refine(..., payload: WorkPayload, ...) -> WorkOutput {
+      let data = payload.take();
+
+      // 1. Validate payload size
+      if data.len() < HASH_SIZE + 1 {
+          return error_response();  // Need at least 33 bytes
+      }
+
+      // 2. Split the payload
+      let expected_hash = &data[..32];      // First 32 bytes
+      let preimage = &data[32..];           // Everything after
+
+      // 3. Re-compute the hash
+      let mut hasher = Blake2s256::new();
+      hasher.update(preimage);
+      let computed_hash = hasher.finalize();
+
+      // 4. Compare!
+      let is_valid = computed_hash.as_slice() == expected_hash;
+
+      // 5. Return: [result_code] + [computed_hash]
+      //    0x01 = valid, 0x00 = invalid
+      [is_valid as u8, ...computed_hash]
+  }
+```
+
+  Accumulate (lines 79-97) - State Update
+
+```
+  fn accumulate(..., item_count: usize, ...) -> Option<Hash> {
+      // Increment verification counter
+      let count = get_storage(b"count").unwrap_or(0);
+      set_storage(b"count", count + item_count);
+
+      set_storage(b"status", b"accumulated");
+      None
+  }
+
+  The Flow
+
+  Client sends: [0x1a213b... (corrupted hash)] + ["hello"]
+                            ↓
+               ┌────────────────────────────┐
+     REFINE    │ hash("hello") = 0x19213b... │  ← runs on 1 validator core
+               │ 0x19213b ≠ 0x1a213b         │    (up to 6 seconds)
+               │ return [0x00, 0x19213b...]  │
+               └────────────────────────────┘
+                            ↓
+               ┌────────────────────────────┐
+   ACCUMULATE  │ count += 1                  │  ← runs on ALL validators
+               │ status = "accumulated"      │    (must be <10ms)
+               └────────────────────────────┘
+```
+
+  The key insight: refine does the actual hash computation and comparison (expensive), while accumulate just records the result (cheap and fast).
 
 ### Host Calls
 Interact with the blockchain via host calls in the `accumulate` module:

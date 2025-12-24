@@ -1,0 +1,27 @@
+{
+  "name": "jam-service-client",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "TypeScript client for interacting with my-jam-service on JAM",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "submit": "npx tsx src/submit-proof.ts",
+    "query": "npx tsx src/query-state.ts",
+    "monitor": "npx tsx src/monitor.ts",
+    "hash-verify": "npx tsx src/hash-verify.ts"
+  },
+  "keywords": ["jam", "polkadot", "zk", "proof"],
+  "author": "abutlabs <abutlabs@gmx.com>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "ws": "^8.18.0",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

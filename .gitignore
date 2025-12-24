@@ -25,7 +25,7 @@ settings.local.json
 # Dependency folder for your deployment scripts and UI.
 node_modules/
 dist/
-lib/
+/lib/
 
 # Logs
 npm-debug.log*

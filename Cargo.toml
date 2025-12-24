@@ -8,6 +8,7 @@ authors = ["abutlabs <abutlabs@gmx.com>"]
 [dependencies]
 jam-pvm-common = { version = "0.1.26", default-features = false, features = ["service"] }
 polkavm-derive = "0.29"
+blake2 = { version = "0.10", default-features = false }
 
 [profile.release]
 panic = "abort"

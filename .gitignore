@@ -1,3 +1,6 @@
+# Polkajam
+polkajam-nightly/
+
 # --- Rust / Cargo ---
 # The 'target' folder contains all compiled binaries and temporary build files.
 # It can grow to several GBs and should never be committed.

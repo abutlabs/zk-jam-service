@@ -2,6 +2,20 @@
 
 A minimal JAM (Join-Accumulate Machine) service demonstrating the new Polkadot compute paradigm.
 
+## Project Structure
+
+```
+my-jam-service/
+├── .gitignore          <-- Ignores /target/ and /node_modules/
+├── Cargo.toml          <-- Rust dependencies & Metadata
+├── src/
+│   └── lib.rs          <-- Your JAM service logic
+├── deploy.ts           <-- Your deployment bridge (The "Installer")
+├── package.json        <-- TypeScript dependencies
+├── tsconfig.json       <-- TypeScript configuration
+└── README.md           <-- Instructions on how to build & deploy
+```
+
 ## What is JAM?
 
 JAM is Polkadot's next-generation architecture that separates **computation** from **state updates**:
@@ -22,15 +36,6 @@ This means you can:
 - Submit the result to JAM
 - JAM verifies it in milliseconds and finalizes on-chain
 
-## Project Structure
-
-```
-my-jam-service/
-├── Cargo.toml          # Rust dependencies and build config
-├── src/
-│   └── lib.rs          # The JAM service implementation
-└── my-jam-service.jam  # Compiled PVM blob (after build)
-```
 
 ## Prerequisites
 
@@ -48,48 +53,117 @@ cargo install jam-pvm-build
 rustup component add rust-src --toolchain nightly-2025-05-10
 ```
 
-## Building
+## Getting Started
+
+### Step 1: Build the JAM Service
 
 ```bash
-# Build the .jam blob
+# Build the .jam blob (compiles Rust to PolkaVM bytecode)
 jam-pvm-build
 ```
 
-Output: `my-jam-service.jam` (~19KB)
+This produces `my-jam-service.jam` (~19KB) - your compiled service.
 
-## The Service API
+### Step 2: Download PolkaJam
 
-JAM services implement the `Service` trait with two core functions:
+Download the PolkaJam binary for your system from [PolkaJam Releases](https://github.com/parity-tech/polkajam/releases):
 
-### `refine()` - The Heavy Lifting
-
-```rust
-fn refine(
-    _core_index: CoreIndex,
-    _item_index: usize,
-    _service_id: ServiceId,
-    payload: WorkPayload,
-    _package_hash: WorkPackageHash,
-) -> WorkOutput {
-    // Off-chain computation (up to 6 seconds)
-    // Example: Verify a ZK proof, process data, run ML inference
-    payload.take().iter().map(|b| b.wrapping_add(1)).collect::<Vec<u8>>().into()
-}
+```bash
+# Example for macOS ARM64
+curl -LO https://github.com/parity-tech/polkajam/releases/download/nightly/polkajam-nightly-macos-aarch64.tar.gz
+tar -xzf polkajam-nightly-macos-aarch64.tar.gz
+mv polkajam-nightly-* polkajam-nightly
 ```
 
-### `accumulate()` - The State Update
+### Step 3: Run a Local Testnet
 
-```rust
-fn accumulate(
-    _slot: Slot,
-    _service_id: ServiceId,
-    _item_count: usize,
-) -> Option<Hash> {
-    // On-chain state update (must be fast, <10ms)
-    set_storage(b"status", b"processed").ok();
-    None
-}
+The `jamt` tool requires a multi-validator network. Use `polkajam-testnet` to spin up a 6-validator local testnet:
+
+```bash
+# Terminal 1: Start the testnet (spawns 6 validators)
+./polkajam-nightly/polkajam-testnet
 ```
+
+This starts 6 validator nodes (node0-node5) that automatically discover each other. Wait until you see:
+- `Sync complete` messages
+- `Net status: 5 peers (5 vals)` on each node
+- Blocks being authored and finalized
+
+The first node exposes:
+- **RPC endpoint**: `ws://localhost:19800`
+- **Additional nodes**: ports 19801-19805
+
+### Step 4: Deploy Your Service
+
+Open a new terminal and use `jamt` to deploy:
+
+```bash
+# Terminal 2: Create the service on-chain
+./polkajam-nightly/jamt create-service my-jam-service.jam
+```
+
+**Options:**
+```bash
+# With initial token endowment
+./polkajam-nightly/jamt create-service my-jam-service.jam 1000000
+
+# With custom gas limits
+./polkajam-nightly/jamt create-service my-jam-service.jam \
+  --min-item-gas 2000000 \
+  --min-memo-gas 1000000
+```
+
+On success, you'll receive a **Service ID** (e.g., `0c7bb62b`). Save this!
+
+### Step 5: Submit a Work Item
+
+Test your service by sending a work item:
+
+```bash
+# Submit payload "hello" to your service (use your service ID)
+./polkajam-nightly/jamt item <service_id> "hello"
+
+# Or with hex payload
+./polkajam-nightly/jamt item <service_id> 0x48656c6c6f
+```
+
+**What happens:**
+1. Your payload enters the **Refine** stage (off-chain computation)
+2. The `refine()` function processes it (increments each byte by 1)
+3. Results move to **Accumulate** stage (on-chain state update)
+4. The `accumulate()` function runs, setting `status = "processed"`
+
+### Step 6: Monitor with jamtop (Optional)
+
+```bash
+# Real-time node monitoring
+./polkajam-nightly/jamtop
+```
+
+
+
+## Quick Reference
+
+| Command | Description |
+|---------|-------------|
+| `polkajam-testnet` | Start 6-validator local testnet |
+| `jamt create-service <code.jam>` | Deploy a new service |
+| `jamt item <service_id> <payload>` | Submit work to a service |
+| `jamt transfer <to> <amount>` | Transfer tokens |
+| `jamt inspect` | Get block information |
+| `jamtop` | Real-time monitoring dashboard |
+
+## Alternative: Deploy via TypeScript
+
+The included `deploy.ts` script provides an alternative deployment method using JSON-RPC.
+
+```bash
+npm install
+npx ts-node deploy.ts
+```
+
+> **Note:** The TypeScript deployer is experimental. The recommended approach is using `jamt create-service` as shown above.
+
 
 ## Architecture: The Coprocessor Model
 

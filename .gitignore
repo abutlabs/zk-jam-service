@@ -1,0 +1,45 @@
+# --- Rust / Cargo ---
+# The 'target' folder contains all compiled binaries and temporary build files.
+# It can grow to several GBs and should never be committed.
+/target/
+
+# Cargo.lock is usually committed for apps, but for a JAM service (library), 
+# it's often ignored. However, in this 0-to-1 phase, keeping it is fine.
+# If you prefer to ignore it, uncomment the line below:
+# Cargo.lock
+
+# --- jam-pvm-build specific ---
+# These are the actual PVM blobs. While these are the "end product", 
+# they are generated from your source code and should be ignored 
+# to keep the repo clean.
+*.pvm
+*.elf
+
+# --- Agents ---
+settings.local.json
+
+# --- TypeScript / Node.js ---
+# Dependency folder for your deployment scripts and UI.
+node_modules/
+dist/
+lib/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Environment variables (Sensitive info like private keys/seeds)
+.env
+.env.local
+
+# --- Operating System ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo

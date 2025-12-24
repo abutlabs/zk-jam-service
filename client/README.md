@@ -1,111 +1,80 @@
-# JAM Service Client
+# CLI Client
 
-TypeScript client for interacting with `my-jam-service` on the JAM network.
+TypeScript tools for interacting with the zk-jam-service on JAM.
 
 ## Setup
 
 ```bash
-cd client
 npm install
+```
+
+## Hash Verification
+
+Submit a preimage for on-chain verification:
+
+```bash
+# Valid verification (hash matches)
+npx tsx src/hash-verify.ts "hello world"
+
+# Tampered verification (hash intentionally corrupted - will fail)
+npx tsx src/hash-verify.ts "hello world" --tamper
+
+# With custom service ID
+npx tsx src/hash-verify.ts "hello" --service-id abc12345
+```
+
+**What happens:**
+1. Computes `blake2s256("hello world")` locally
+2. Builds payload: `[32-byte hash] + [preimage bytes]`
+3. Submits to JAM via `jamt item <service_id> <payload>`
+4. Service re-computes hash in `refine()` and compares
+
+## Query Storage
+
+```bash
+# Query verification count
+npx tsx src/query-state.ts count
+
+# Query last status
+npx tsx src/query-state.ts status
+
+# With service ID
+npx tsx src/query-state.ts count --service-id abc12345
+```
+
+## Monitor Network
+
+```bash
+# Watch for new slots
+npx tsx src/monitor.ts
+
+# Custom interval (ms)
+npx tsx src/monitor.ts --interval 2000
 ```
 
 ## Configuration
 
-Set your service ID via environment variable:
+| Env Variable | Description | Default |
+|--------------|-------------|---------|
+| `JAM_SERVICE_ID` | Service ID (8 hex chars) | `99fbfec5` |
+| `JAMT_PATH` | Path to jamt binary | `../polkajam-nightly/jamt` |
 
-```bash
-export JAM_SERVICE_ID=0c7bb62b
-```
-
-Or pass it directly with `--service-id`.
-
-## Commands
-
-### Query Service Info
-
-```bash
-# Get service metadata
-npm run query
-
-# With explicit service ID
-npm run query -- --service-id 0c7bb62b
-```
-
-### Query Storage
-
-```bash
-# Query a specific storage key
-npm run query -- --key status
-
-# Query with hex key
-npm run query -- --key 0x737461747573
-
-# Raw output (no decoding)
-npm run query -- --key status --raw
-```
-
-### Submit Payload
-
-```bash
-# Submit a string payload
-npm run submit -- --payload "hello world"
-
-# Submit hex payload
-npm run submit -- --payload 0x48656c6c6f
-
-# Submit from file
-npm run submit -- --file proof.bin
-```
-
-> **Note:** Direct RPC submission is not yet implemented. The command will show the equivalent `jamt` command to run.
-
-### Monitor Network
-
-```bash
-# Watch for new blocks
-npm run monitor
-
-# Custom polling interval
-npm run monitor -- --interval 1000
-```
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `JAM_RPC` | WebSocket RPC endpoint | `ws://localhost:19800` |
-| `JAM_SERVICE_ID` | Default service ID | (none) |
-
-## Project Structure
+## File Structure
 
 ```
 client/
 ├── src/
-│   ├── config.ts         # Configuration and constants
-│   ├── submit-proof.ts   # Submit work items
-│   ├── query-state.ts    # Query service state
-│   ├── monitor.ts        # Monitor network activity
+│   ├── config.ts         # Service ID, paths
+│   ├── hash-verify.ts    # Submit hash verifications
+│   ├── query-state.ts    # Read service storage
+│   ├── monitor.ts        # Watch network activity
 │   └── utils/
-│       ├── rpc.ts        # WebSocket RPC client
-│       └── encoding.ts   # Hex/string encoding
-├── package.json
-├── tsconfig.json
-└── README.md
+│       ├── rpc.ts        # jamt CLI wrapper
+│       └── encoding.ts   # Hex encoding helpers
+└── package.json
 ```
 
-## Development
+## See Also
 
-```bash
-# Build TypeScript
-npm run build
-
-# Run directly with tsx
-npx tsx src/query-state.ts --service-id 0c7bb62b
-```
-
-## Next Steps
-
-1. **Phase 2:** Implement hash verification in the service
-2. **Phase 3:** Integrate ZK proof verification
-3. Add direct RPC submission (when PolkaJam API is documented)
-4. Add WebSocket subscriptions for real-time updates
+- [Web Dashboard](./web/README.md) - Visual interface
+- [Main README](../README.md) - Project overview

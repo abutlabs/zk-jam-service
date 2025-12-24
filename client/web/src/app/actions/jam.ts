@@ -55,7 +55,7 @@ export async function getServiceInfo(serviceId: string): Promise<{
   const result = await runJamt(['inspect', 'best', 'service', serviceId]);
   if (!result.success) return null;
 
-  // Parse: "Service my-jam-service v0.1.0 by abutlabs <abutlabs@gmx.com>"
+  // Parse: "Service zk-jam-service v0.1.0 by abutlabs <abutlabs@gmx.com>"
   const match = result.output.match(/Service\s+(\S+)\s+v(\S+)\s+by\s+(.+)/);
   if (!match) return null;
 

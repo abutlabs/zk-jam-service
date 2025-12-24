@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Web Dashboard
 
-## Getting Started
+Visual interface for the zk-jam-service. Built with Next.js 14 and shadcn/ui.
 
-First, run the development server:
+## Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Pages
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Route | Description |
+|-------|-------------|
+| `/` | Dashboard with network status and JAM pipeline visualization |
+| `/verify` | Interactive hash verification form with tamper testing |
+| `/explorer` | Block browser, slot history, verification tracking |
+| `/learn` | Educational content about JAM architecture and ZK proofs |
 
-## Learn More
+## Features
 
-To learn more about Next.js, take a look at the following resources:
+### Hash Verification (`/verify`)
+- Enter any text to compute its Blake2s-256 hash
+- Submit to the JAM service for on-chain verification
+- Toggle "tamper" to test failure paths
+- Watch the pipeline progress: Submit → Refine → Audit → Accumulate
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Explorer (`/explorer`)
+- Real-time slot/block display
+- Click slots to see verifications submitted at that block
+- Full verification history with expandable details
+- Payload breakdown showing byte structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Verification History
+- Stored locally in browser (localStorage)
+- Expandable cards with educational payload breakdown
+- Stats: total/valid/invalid/pending counts
 
-## Deploy on Vercel
+## Configuration
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Create `.env.local`:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+# Service ID (8 hex chars, no 0x prefix)
+NEXT_PUBLIC_JAM_SERVICE_ID=99fbfec5
+```
+
+The dashboard calls the `jamt` CLI via server actions. Ensure `polkajam-testnet` is running.
+
+## Architecture
+
+```
+src/
+├── app/
+│   ├── page.tsx              # Dashboard
+│   ├── verify/page.tsx       # Verification form
+│   ├── explorer/page.tsx     # Block explorer
+│   ├── learn/page.tsx        # Educational content
+│   ├── actions/jam.ts        # Server actions (jamt wrapper)
+│   └── api/network/route.ts  # Network status API
+├── components/
+│   ├── Pipeline.tsx          # Visual stage indicator
+│   ├── VerificationHistory.tsx
+│   └── ui/                   # shadcn components
+└── lib/
+    ├── history.ts            # localStorage store
+    └── utils.ts
+```
+
+## Development
+
+```bash
+# Development with hot reload
+npm run dev
+
+# Production build
+npm run build
+npm start
+
+# Type check
+npx tsc --noEmit
+```
+
+## See Also
+
+- [CLI Tools](../README.md) - Command-line client
+- [Main README](../../README.md) - Project overview

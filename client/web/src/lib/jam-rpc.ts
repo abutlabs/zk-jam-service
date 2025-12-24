@@ -54,7 +54,7 @@ export function bytesToHex(bytes: Uint8Array): string {
  * Parse service info from jamt output
  */
 export function parseServiceInfo(output: string): ServiceInfo | null {
-  // Format: "Service my-jam-service v0.1.0 by abutlabs <abutlabs@gmx.com>"
+  // Format: "Service zk-jam-service v0.1.0 by abutlabs <abutlabs@gmx.com>"
   const match = output.match(/Service\s+(\S+)\s+v(\S+)\s+by\s+(.+)/);
   if (!match) return null;
 

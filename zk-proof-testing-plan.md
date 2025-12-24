@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document tracks the evolution of `my-jam-service` from a minimal demo into a functional ZK proof verification service running on JAM (Join-Accumulate Machine).
+This document tracks the evolution of `zk-jam-service` from a minimal demo into a functional ZK proof verification service running on JAM (Join-Accumulate Machine).
 
 **Current Status:** Phase 2 Complete - Hash verification working end-to-end with web dashboard.
 
@@ -36,7 +36,7 @@ This document tracks the evolution of `my-jam-service` from a minimal demo into 
 │  6 validators running locally via `polkajam-testnet`                        │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  my-jam-service (Service ID: 99fbfec5)                              │    │
+│  │  zk-jam-service (Service ID: 99fbfec5)                              │    │
 │  │                                                                      │    │
 │  │  REFINE (off-chain, 6s limit, runs on validator cores):             │    │
 │  │    1. Extract expected_hash (bytes 0-31) and preimage (bytes 32+)   │    │
@@ -135,7 +135,7 @@ This document tracks the evolution of `my-jam-service` from a minimal demo into 
 
 - [x] **2.5** Deployed and tested end-to-end:
   1. Started testnet: `./polkajam-nightly/polkajam-testnet`
-  2. Deployed service: `./polkajam-nightly/jamt create-service my-jam-service.jam`
+  2. Deployed service: `./polkajam-nightly/jamt create-service zk-jam-service.jam`
   3. Submitted verifications via CLI
   4. Observed pipeline in `jamtop`
 
@@ -405,12 +405,12 @@ Example: "hello" → payload = 0x19213b... (32 bytes) + 0x68656c6c6f (5 bytes)
 ## Current File Structure
 
 ```
-my-jam-service/
+zk-jam-service/
 ├── Cargo.toml                    # Rust dependencies (blake2)
 ├── Cargo.lock
 ├── src/
 │   └── lib.rs                    # JAM service: refine + accumulate
-├── my-jam-service.jam            # Compiled PolkaVM blob
+├── zk-jam-service.jam            # Compiled PolkaVM blob
 │
 ├── client/                       # CLI tooling
 │   ├── package.json
@@ -469,7 +469,7 @@ my-jam-service/
 ./polkajam-nightly/jamtop
 
 # Deploy/update service
-./polkajam-nightly/jamt create-service my-jam-service.jam
+./polkajam-nightly/jamt create-service zk-jam-service.jam
 
 # Submit hash verification (CLI)
 cd client && npx tsx src/hash-verify.ts "your message"

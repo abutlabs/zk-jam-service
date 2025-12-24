@@ -125,7 +125,7 @@ export default function ExplorerPage() {
           <CardHeader className="pb-2">
             <CardDescription>Active Service</CardDescription>
             <CardTitle className="text-lg truncate">
-              {networkData.serviceInfo?.name ?? 'my-jam-service'}
+              {networkData.serviceInfo?.name ?? 'zk-jam-service'}
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">

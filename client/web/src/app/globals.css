@@ -6,8 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
+  --font-mono: var(--font-roboto-mono), monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -46,73 +46,43 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+/* Light theme (default) - Polkadot Wiki style */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  --radius: 0.5rem;
+  --background: #fafafa;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+  --primary: #1a1a1a;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f0f0;
+  --secondary-foreground: #1a1a1a;
+  --muted: #f5f5f5;
+  --muted-foreground: #666666;
+  --accent: #E6007A;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #1a1a1a;
+  --chart-1: #E6007A;
+  --chart-2: #1a1a1a;
+  --chart-3: #666666;
+  --chart-4: #22c55e;
+  --chart-5: #E6007A;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #1a1a1a;
+  --sidebar-primary: #1a1a1a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f0;
+  --sidebar-accent-foreground: #1a1a1a;
+  --sidebar-border: #e5e5e5;
+  --sidebar-ring: #1a1a1a;
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Polkadot accent color */
+  --polkadot-pink: #E6007A;
 }
 
 @layer base {
@@ -121,5 +91,102 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
+}
+
+/* Hero section with subtle texture like Polkadot Wiki */
+.hero-section {
+  background: linear-gradient(180deg, #e8e8e8 0%, #f5f5f5 100%);
+  position: relative;
+}
+
+.hero-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.4;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+/* Clean card style */
+.card-clean {
+  @apply bg-white border border-gray-200 rounded-lg;
+  @apply transition-all duration-200;
+  @apply hover:border-gray-300 hover:shadow-sm;
+}
+
+/* Primary button - black like Polkadot Wiki */
+.btn-primary {
+  @apply bg-[#1a1a1a] text-white font-medium px-6 py-3 rounded-full;
+  @apply hover:bg-[#333] transition-all duration-200;
+  @apply inline-flex items-center gap-2;
+}
+
+/* Secondary button - outlined */
+.btn-secondary {
+  @apply bg-[#1a1a1a] text-white font-medium px-6 py-3 rounded-full;
+  @apply hover:bg-[#333] transition-all duration-200;
+  @apply inline-flex items-center gap-2;
+}
+
+/* Status indicators */
+.status-success {
+  @apply bg-green-500;
+}
+
+.status-pending {
+  @apply bg-yellow-500;
+}
+
+.status-error {
+  @apply bg-red-500;
+}
+
+/* Link with arrow */
+.link-arrow {
+  @apply inline-flex items-center gap-1 font-medium text-[#1a1a1a];
+  @apply hover:gap-2 transition-all duration-200;
+}
+
+.link-arrow::after {
+  content: "→";
+}
+
+/* Section title */
+.section-title {
+  @apply text-4xl md:text-5xl font-bold text-[#1a1a1a] tracking-tight;
+}
+
+/* Muted description */
+.section-description {
+  @apply text-gray-500 text-lg;
+}
+
+/* Code block */
+.code-block {
+  @apply bg-gray-100 border border-gray-200 rounded-lg p-4 font-mono text-sm;
+}
+
+/* Pink accent for special elements */
+.accent-pink {
+  color: #E6007A;
+}
+
+/* Badge styles */
+.badge-default {
+  @apply bg-gray-100 text-gray-700 border border-gray-200;
+}
+
+.badge-success {
+  @apply bg-green-50 text-green-700 border border-green-200;
+}
+
+.badge-error {
+  @apply bg-red-50 text-red-700 border border-red-200;
+}
+
+.badge-pink {
+  @apply bg-pink-50 text-[#E6007A] border border-pink-200;
 }

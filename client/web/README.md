@@ -45,7 +45,7 @@ Create `.env.local`:
 
 ```bash
 # Service ID (8 hex chars, no 0x prefix)
-NEXT_PUBLIC_JAM_SERVICE_ID=99fbfec5
+NEXT_PUBLIC_JAM_SERVICE_ID=8a851331
 ```
 
 The dashboard calls the `jamt` CLI via server actions. Ensure `polkajam-testnet` is running.

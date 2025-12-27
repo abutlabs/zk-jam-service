@@ -165,3 +165,89 @@ export async function getRecentActivity(): Promise<{
 
   return { currentSlot: slot, recentSlots };
 }
+
+interface JamServiceInfo {
+  id: string;
+  name: string;
+  version?: string;
+  author?: string;
+}
+
+/**
+ * Get list of available services on the chain
+ * Since there's no direct API to enumerate services, we probe known IDs
+ */
+export async function getServices(): Promise<{
+  services: JamServiceInfo[];
+  error?: string;
+}> {
+  // First check if we can connect by getting the current slot
+  const slotResult = await getCurrentSlot();
+  if (slotResult.error || slotResult.slot === null) {
+    return {
+      services: [],
+      error: slotResult.error || 'Cannot connect to JAM network',
+    };
+  }
+
+  const services: JamServiceInfo[] = [];
+
+  // Always check bootstrap service (ID 0)
+  const bootstrapInfo = await getServiceInfo('00000000');
+  if (bootstrapInfo) {
+    services.push({
+      id: '00000000',
+      name: bootstrapInfo.name || 'Bootstrap Service',
+      version: bootstrapInfo.version,
+      author: bootstrapInfo.author,
+    });
+  }
+
+  // Probe a range of service IDs to discover services
+  // Services are created with sequential-ish IDs, but could be anywhere
+  // We'll check some known patterns and recent IDs
+  const idsToProbe = [
+    // Check first few sequential IDs
+    '00000001', '00000002', '00000003', '00000004', '00000005',
+    // Check some hash-like IDs that might be from create-service
+    // These are examples - real IDs would come from service creation
+  ];
+
+  // Try to probe IDs in parallel
+  const probeResults = await Promise.all(
+    idsToProbe.map(async (id) => {
+      const info = await getServiceInfo(id);
+      if (info && info.name) {
+        return { id, ...info };
+      }
+      return null;
+    })
+  );
+
+  for (const result of probeResults) {
+    if (result && !services.some(s => s.id === result.id)) {
+      services.push(result);
+    }
+  }
+
+  return { services };
+}
+
+/**
+ * Check if a specific service exists and get its info
+ */
+export async function checkService(serviceId: string): Promise<JamServiceInfo | null> {
+  // Normalize the service ID
+  const normalizedId = serviceId.toLowerCase().replace(/^0x/, '').padStart(8, '0');
+
+  const info = await getServiceInfo(normalizedId);
+  if (info && info.name) {
+    return {
+      id: normalizedId,
+      name: info.name,
+      version: info.version,
+      author: info.author,
+    };
+  }
+  return null;
+}

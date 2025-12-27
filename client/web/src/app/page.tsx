@@ -1,91 +1,115 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Pipeline } from '@/components/Pipeline';
-import { getCurrentSlot, getServiceInfo } from './actions/jam';
+import { getCurrentSlot } from './actions/jam';
+import { useService } from '@/contexts/ServiceContext';
 import Link from 'next/link';
 
-// Default service ID - can be overridden via env
-const SERVICE_ID = process.env.NEXT_PUBLIC_JAM_SERVICE_ID || '99fbfec5';
+export default function DashboardPage() {
+  const { selectedService, isLoading: serviceLoading } = useService();
+  const [currentSlot, setCurrentSlot] = useState<number | null>(null);
+  const [slotLoading, setSlotLoading] = useState(true);
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-export default async function DashboardPage() {
-  const [slotResult, serviceInfo] = await Promise.all([
-    getCurrentSlot(),
-    getServiceInfo(SERVICE_ID),
-  ]);
+  useEffect(() => {
+    const fetchSlot = async () => {
+      const result = await getCurrentSlot();
+      setCurrentSlot(result.slot);
+      setSlotLoading(false);
+    };
+    fetchSlot();
+    const interval = setInterval(fetchSlot, 6000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <div className="space-y-8">
+    <div className="container mx-auto px-4 md:px-6 py-8 space-y-10">
       {/* Hero Section */}
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-          JAM Service Dashboard
+      <div className="hero-section rounded-2xl p-8 md:p-12 text-center space-y-6">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-gray-200 text-[#E6007A] text-sm font-medium">
+          <span className="h-2 w-2 rounded-full bg-[#E6007A] animate-pulse" />
+          A Web3 Foundation Grant
+        </div>
+        <h1 className="section-title">
+          ZK JAM Service
         </h1>
-        <p className="text-zinc-400 max-w-2xl mx-auto">
-          Visual interface for interacting with JAM (Join-Accumulate Machine) services.
-          Submit hash verifications, explore the network, and learn about ZK proofs.
+        <p className="section-description max-w-2xl mx-auto">
+          Zero-knowledge proof verification on JAM (Join-Accumulate Machine).
+          Submit work items, explore the network, and learn about ZK proofs.
         </p>
+        <div className="flex justify-center gap-4 pt-4">
+          <Link href="/verify" className="btn-primary">
+            Start Verifying
+            <span>→</span>
+          </Link>
+          <Link
+            href="/learn"
+            className="bg-white border border-gray-200 text-[#1a1a1a] px-6 py-3 rounded-full font-medium transition-all duration-200 hover:border-gray-300 hover:shadow-sm inline-flex items-center gap-2"
+          >
+            Learn More
+          </Link>
+        </div>
       </div>
 
       {/* Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Network Status */}
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardDescription>Network Status</CardDescription>
-            <CardTitle className="text-2xl flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
-              Connected
+        <Card className="card-clean">
+          <CardHeader className="pb-3">
+            <CardDescription className="text-gray-500 uppercase text-xs tracking-wider">Network Status</CardDescription>
+            <CardTitle className="text-2xl flex items-center gap-3 text-[#1a1a1a]">
+              <span className={`h-3 w-3 rounded-full ${currentSlot ? 'bg-green-500' : 'bg-yellow-500'} ${currentSlot ? '' : 'animate-pulse'}`} />
+              {slotLoading ? 'Connecting...' : currentSlot ? 'Connected' : 'Offline'}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-sm text-zinc-400">
+            <div className="text-sm text-gray-500">
               Current Slot:{' '}
-              <span className="text-white font-mono">
-                {slotResult.slot?.toLocaleString() ?? 'Loading...'}
+              <span className="text-[#1a1a1a] font-mono">
+                {slotLoading ? '...' : currentSlot?.toLocaleString() ?? '---'}
               </span>
             </div>
           </CardContent>
         </Card>
 
         {/* Service Info */}
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardDescription>Active Service</CardDescription>
-            <CardTitle className="text-2xl">
-              {serviceInfo?.name ?? 'Unknown'}
+        <Card className="card-clean">
+          <CardHeader className="pb-3">
+            <CardDescription className="text-gray-500 uppercase text-xs tracking-wider">Active Service</CardDescription>
+            <CardTitle className="text-2xl text-[#1a1a1a]">
+              {serviceLoading ? 'Loading...' : selectedService?.name ?? 'No service selected'}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1 text-sm">
-              <div className="text-zinc-400">
-                Version: <span className="text-white">v{serviceInfo?.version}</span>
+            <div className="space-y-1.5 text-sm">
+              <div className="text-gray-500">
+                Version: <span className="text-[#1a1a1a]">{selectedService?.version ? `v${selectedService.version}` : '---'}</span>
               </div>
-              <div className="text-zinc-400">
-                ID: <code className="text-purple-400">{SERVICE_ID}</code>
+              <div className="text-gray-500">
+                ID: <code className="text-[#E6007A] font-mono">{selectedService?.id ?? '---'}</code>
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Quick Actions */}
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardDescription>Quick Actions</CardDescription>
-            <CardTitle className="text-2xl">Get Started</CardTitle>
+        <Card className="card-clean">
+          <CardHeader className="pb-3">
+            <CardDescription className="text-gray-500 uppercase text-xs tracking-wider">Quick Actions</CardDescription>
+            <CardTitle className="text-2xl text-[#1a1a1a]">Get Started</CardTitle>
           </CardHeader>
-          <CardContent className="flex gap-2">
+          <CardContent className="flex gap-3">
             <Link
               href="/verify"
-              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-center text-sm font-medium transition-colors"
+              className="flex-1 bg-[#1a1a1a] hover:bg-[#333] text-white px-4 py-2.5 rounded-lg text-center text-sm font-medium transition-all duration-200"
             >
               Verify Hash
             </Link>
             <Link
               href="/explorer"
-              className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-center text-sm font-medium transition-colors"
+              className="flex-1 bg-white hover:bg-gray-50 border border-gray-200 text-[#1a1a1a] px-4 py-2.5 rounded-lg text-center text-sm font-medium transition-all duration-200"
             >
               Explorer
             </Link>
@@ -94,10 +118,10 @@ export default async function DashboardPage() {
       </div>
 
       {/* Pipeline Visualization */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="card-clean">
         <CardHeader>
-          <CardTitle>JAM Pipeline</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-[#1a1a1a]">JAM Pipeline</CardTitle>
+          <CardDescription className="text-gray-500">
             How work items flow through the Join-Accumulate Machine
           </CardDescription>
         </CardHeader>
@@ -107,67 +131,67 @@ export default async function DashboardPage() {
       </Card>
 
       {/* How It Works */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="card-clean">
         <CardHeader>
-          <CardTitle>How JAM Works</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-[#1a1a1a]">How JAM Works</CardTitle>
+          <CardDescription className="text-gray-500">
             Understanding the Join-Accumulate Machine architecture
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Refine */}
-            <div className="space-y-2">
+            <div className="space-y-3 p-5 rounded-xl bg-gray-50 border border-gray-200">
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30">
+                <Badge className="badge-pink">
                   Refine
                 </Badge>
-                <span className="text-sm text-zinc-500">Off-chain</span>
+                <span className="text-sm text-gray-500">Off-chain</span>
               </div>
-              <h3 className="font-semibold">Heavy Computation</h3>
-              <p className="text-sm text-zinc-400">
+              <h3 className="font-semibold text-[#1a1a1a]">Heavy Computation</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">
                 Runs on a small set of validator cores with up to 6 seconds of compute time.
                 Perfect for ZK proof verification, data processing, and complex calculations.
               </p>
-              <code className="block text-xs bg-zinc-800 p-2 rounded text-green-400">
+              <code className="code-block text-[#1a1a1a]">
                 fn refine(payload) → WorkOutput
               </code>
             </div>
 
             {/* Accumulate */}
-            <div className="space-y-2">
+            <div className="space-y-3 p-5 rounded-xl bg-gray-50 border border-gray-200">
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30">
+                <Badge className="badge-success">
                   Accumulate
                 </Badge>
-                <span className="text-sm text-zinc-500">On-chain</span>
+                <span className="text-sm text-gray-500">On-chain</span>
               </div>
-              <h3 className="font-semibold">State Updates</h3>
-              <p className="text-sm text-zinc-400">
+              <h3 className="font-semibold text-[#1a1a1a]">State Updates</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">
                 Runs on all validators with strict time limits (&lt;10ms).
                 Updates global state based on refine results.
               </p>
-              <code className="block text-xs bg-zinc-800 p-2 rounded text-green-400">
+              <code className="code-block text-[#1a1a1a]">
                 fn accumulate(results) → StateUpdate
               </code>
             </div>
           </div>
 
           {/* The breakthrough */}
-          <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-lg p-4 border border-purple-500/20">
-            <h3 className="font-semibold text-purple-400 mb-2">The Breakthrough</h3>
-            <p className="text-sm text-zinc-300">
-              <strong>Traditional blockchains:</strong> Every node runs every computation.<br />
-              <strong>JAM:</strong> A few nodes compute, everyone else validates.
+          <div className="bg-pink-50 rounded-xl p-5 border border-pink-200">
+            <h3 className="font-semibold text-[#E6007A] mb-2">The Breakthrough</h3>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              <strong className="text-[#1a1a1a]">Traditional blockchains:</strong> Every node runs every computation.<br />
+              <strong className="text-[#1a1a1a]">JAM:</strong> A few nodes compute, everyone else validates.
             </p>
           </div>
         </CardContent>
       </Card>
 
       {/* Service Author */}
-      {serviceInfo?.author && (
-        <div className="text-center text-sm text-zinc-500">
-          Service maintained by <span className="text-zinc-300">{serviceInfo.author}</span>
+      {selectedService?.author && (
+        <div className="text-center text-sm text-gray-400 pb-8">
+          Service maintained by <span className="text-gray-600">{selectedService.author}</span>
         </div>
       )}
     </div>

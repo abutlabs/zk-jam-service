@@ -1,17 +1,19 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentSlot, getServiceInfo } from '@/app/actions/jam';
-
-const SERVICE_ID = process.env.NEXT_PUBLIC_JAM_SERVICE_ID || '99fbfec5';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const [slotResult, serviceInfo] = await Promise.all([
-      getCurrentSlot(),
-      getServiceInfo(SERVICE_ID),
-    ]);
+    const serviceId = request.nextUrl.searchParams.get('serviceId');
+
+    const slotResult = await getCurrentSlot();
+
+    let serviceInfo = null;
+    if (serviceId) {
+      serviceInfo = await getServiceInfo(serviceId);
+    }
 
     return NextResponse.json({
       currentSlot: slotResult.slot,

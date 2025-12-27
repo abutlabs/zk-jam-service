@@ -6,10 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { VerificationHistory } from '@/components/VerificationHistory';
 import { getHistory, getStats, getRecordsBySlot, type VerificationRecord } from '@/lib/history';
+import { useService } from '@/contexts/ServiceContext';
 import Link from 'next/link';
-
-// Default service ID
-const SERVICE_ID = process.env.NEXT_PUBLIC_JAM_SERVICE_ID || '99fbfec5';
 
 interface NetworkData {
   currentSlot: number | null;
@@ -23,6 +21,7 @@ interface NetworkData {
 }
 
 export default function ExplorerPage() {
+  const { selectedService } = useService();
   const [networkData, setNetworkData] = useState<NetworkData>({
     currentSlot: null,
     serviceInfo: null,
@@ -34,16 +33,23 @@ export default function ExplorerPage() {
   const [slotRecords, setSlotRecords] = useState<VerificationRecord[]>([]);
   const [historyKey, setHistoryKey] = useState(0);
 
+  const serviceId = selectedService?.id || '';
+
   // Fetch network data
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('/api/network');
+        const url = serviceId ? `/api/network?serviceId=${serviceId}` : '/api/network';
+        const response = await fetch(url);
         if (response.ok) {
           const data = await response.json();
           setNetworkData({
             currentSlot: data.currentSlot,
-            serviceInfo: data.serviceInfo,
+            serviceInfo: data.serviceInfo || (selectedService ? {
+              name: selectedService.name,
+              version: selectedService.version || '',
+              author: selectedService.author || '',
+            } : null),
             loading: false,
           });
           if (data.currentSlot) {
@@ -67,7 +73,7 @@ export default function ExplorerPage() {
     fetchData();
     const interval = setInterval(fetchData, 6000); // Refresh every 6 seconds (slot time)
     return () => clearInterval(interval);
-  }, []);
+  }, [serviceId, selectedService]);
 
   // Update stats from local history
   useEffect(() => {
@@ -91,13 +97,13 @@ export default function ExplorerPage() {
   const slotsWithVerifications = new Set(history.map(r => r.anchorSlot).filter(Boolean));
 
   return (
-    <div className="space-y-8">
+    <div className="container mx-auto px-4 md:px-6 py-8 space-y-8">
       {/* Header */}
       <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        <h1 className="section-title">
           Service Explorer
         </h1>
-        <p className="text-zinc-400 max-w-2xl mx-auto">
+        <p className="section-description max-w-2xl mx-auto">
           Explore the JAM network state, view recent blocks, and track your verification history.
         </p>
       </div>
@@ -105,72 +111,72 @@ export default function ExplorerPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         {/* Current Slot */}
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="card-clean">
           <CardHeader className="pb-2">
-            <CardDescription>Current Slot</CardDescription>
-            <CardTitle className="text-2xl font-mono">
+            <CardDescription className="text-gray-500">Current Slot</CardDescription>
+            <CardTitle className="text-2xl font-mono text-[#1a1a1a]">
               {networkData.loading ? (
-                <span className="text-zinc-500">Loading...</span>
+                <span className="text-gray-400">Loading...</span>
               ) : networkData.currentSlot ? (
                 `#${networkData.currentSlot.toLocaleString()}`
               ) : (
-                <span className="text-zinc-500">---</span>
+                <span className="text-gray-400">---</span>
               )}
             </CardTitle>
           </CardHeader>
         </Card>
 
         {/* Service */}
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="card-clean">
           <CardHeader className="pb-2">
-            <CardDescription>Active Service</CardDescription>
-            <CardTitle className="text-lg truncate">
+            <CardDescription className="text-gray-500">Active Service</CardDescription>
+            <CardTitle className="text-lg truncate text-[#1a1a1a]">
               {networkData.serviceInfo?.name ?? 'zk-jam-service'}
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <code className="text-xs text-purple-400">{SERVICE_ID}</code>
+            <code className="text-xs text-[#E6007A]">{serviceId || 'No service selected'}</code>
           </CardContent>
         </Card>
 
         {/* Total Verifications */}
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="card-clean">
           <CardHeader className="pb-2">
-            <CardDescription>Total Submissions</CardDescription>
-            <CardTitle className="text-2xl font-mono">{stats.total}</CardTitle>
+            <CardDescription className="text-gray-500">Total Submissions</CardDescription>
+            <CardTitle className="text-2xl font-mono text-[#1a1a1a]">{stats.total}</CardTitle>
           </CardHeader>
         </Card>
 
         {/* Valid */}
-        <Card className="bg-green-500/10 border-green-500/30">
+        <Card className="bg-green-50 border-green-200">
           <CardHeader className="pb-2">
-            <CardDescription className="text-green-400/70">Valid</CardDescription>
-            <CardTitle className="text-2xl font-mono text-green-400">{stats.valid}</CardTitle>
+            <CardDescription className="text-green-600">Valid</CardDescription>
+            <CardTitle className="text-2xl font-mono text-green-700">{stats.valid}</CardTitle>
           </CardHeader>
         </Card>
 
         {/* Invalid */}
-        <Card className="bg-red-500/10 border-red-500/30">
+        <Card className="bg-red-50 border-red-200">
           <CardHeader className="pb-2">
-            <CardDescription className="text-red-400/70">Invalid</CardDescription>
-            <CardTitle className="text-2xl font-mono text-red-400">{stats.invalid}</CardTitle>
+            <CardDescription className="text-red-600">Invalid</CardDescription>
+            <CardTitle className="text-2xl font-mono text-red-700">{stats.invalid}</CardTitle>
           </CardHeader>
         </Card>
 
         {/* Pending */}
-        <Card className="bg-yellow-500/10 border-yellow-500/30">
+        <Card className="bg-yellow-50 border-yellow-200">
           <CardHeader className="pb-2">
-            <CardDescription className="text-yellow-400/70">Pending</CardDescription>
-            <CardTitle className="text-2xl font-mono text-yellow-400">{stats.pending}</CardTitle>
+            <CardDescription className="text-yellow-600">Pending</CardDescription>
+            <CardTitle className="text-2xl font-mono text-yellow-700">{stats.pending}</CardTitle>
           </CardHeader>
         </Card>
       </div>
 
       {/* Recent Slots with Verification Indicators */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="card-clean">
         <CardHeader>
-          <CardTitle>Recent Slots</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-[#1a1a1a]">Recent Slots</CardTitle>
+          <CardDescription className="text-gray-500">
             Click a slot to see verifications submitted at that block. Highlighted slots contain your submissions.
           </CardDescription>
         </CardHeader>
@@ -189,25 +195,25 @@ export default function ExplorerPage() {
                     className={`
                       relative rounded-lg p-4 text-center transition-all
                       ${isSelected
-                        ? 'bg-purple-600 ring-2 ring-purple-400'
+                        ? 'bg-[#1a1a1a] text-white ring-2 ring-[#1a1a1a]'
                         : hasVerifications
-                          ? 'bg-purple-500/20 border-2 border-purple-500/50 hover:border-purple-400'
-                          : 'bg-zinc-800 hover:bg-zinc-700 border border-zinc-700'
+                          ? 'bg-pink-50 border-2 border-[#E6007A]/50 hover:border-[#E6007A]'
+                          : 'bg-gray-50 hover:bg-gray-100 border border-gray-200'
                       }
                     `}
                   >
                     {hasVerifications && (
-                      <div className="absolute -top-1 -right-1 h-5 w-5 bg-purple-500 rounded-full flex items-center justify-center text-xs font-bold">
+                      <div className="absolute -top-1 -right-1 h-5 w-5 bg-[#E6007A] text-white rounded-full flex items-center justify-center text-xs font-bold">
                         {recordsCount}
                       </div>
                     )}
-                    <div className="text-xs text-zinc-500 mb-1">Slot</div>
-                    <div className="font-mono text-lg text-white">#{slot}</div>
+                    <div className={`text-xs mb-1 ${isSelected ? 'text-white/60' : 'text-gray-500'}`}>Slot</div>
+                    <div className={`font-mono text-lg ${isSelected ? 'text-white' : 'text-[#1a1a1a]'}`}>#{slot}</div>
                   </button>
                 );
               })
             ) : (
-              <div className="col-span-full text-center py-8 text-zinc-500">
+              <div className="col-span-full text-center py-8 text-gray-500">
                 {networkData.loading ? 'Loading slots...' : 'No slots available'}
               </div>
             )}
@@ -215,12 +221,12 @@ export default function ExplorerPage() {
 
           {/* Selected Slot Details */}
           {selectedSlot !== null && (
-            <div className="mt-6 p-4 bg-zinc-800/50 rounded-lg border border-purple-500/30">
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-purple-400">
+                <h3 className="font-semibold text-[#1a1a1a]">
                   Slot #{selectedSlot} Verifications
                 </h3>
-                <Badge variant="outline" className="text-purple-400 border-purple-500/30">
+                <Badge variant="outline" className="badge-default">
                   {slotRecords.length} submission{slotRecords.length !== 1 ? 's' : ''}
                 </Badge>
               </div>
@@ -230,36 +236,36 @@ export default function ExplorerPage() {
                   {slotRecords.map((record) => (
                     <div
                       key={record.id}
-                      className="flex items-center justify-between p-3 bg-zinc-900 rounded-lg"
+                      className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200"
                     >
                       <div className="flex items-center gap-3">
                         <div className={`
                           h-8 w-8 rounded-full flex items-center justify-center text-sm
-                          ${record.result === 'valid' ? 'bg-green-500/20 text-green-400' :
-                            record.result === 'invalid' ? 'bg-red-500/20 text-red-400' :
-                            'bg-zinc-700 text-zinc-400'}
+                          ${record.result === 'valid' ? 'bg-green-100 text-green-700' :
+                            record.result === 'invalid' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-600'}
                         `}>
                           {record.result === 'valid' ? '✓' : record.result === 'invalid' ? '✗' : '?'}
                         </div>
                         <div>
-                          <div className="font-mono text-sm text-white truncate max-w-48">
+                          <div className="font-mono text-sm text-[#1a1a1a] truncate max-w-48">
                             {record.preimage.length > 20 ? record.preimage.slice(0, 20) + '...' : record.preimage}
                           </div>
-                          <div className="text-xs text-zinc-500">
+                          <div className="text-xs text-gray-500">
                             {new Date(record.timestamp).toLocaleTimeString()}
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {record.tampered && (
-                          <Badge variant="outline" className="text-xs bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                          <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
                             Tampered
                           </Badge>
                         )}
                         <Badge variant="outline" className={`text-xs ${
-                          record.result === 'valid' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
-                          record.result === 'invalid' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-                          'bg-zinc-500/10 text-zinc-400 border-zinc-500/30'
+                          record.result === 'valid' ? 'bg-green-50 text-green-700 border-green-200' :
+                          record.result === 'invalid' ? 'bg-red-50 text-red-700 border-red-200' :
+                          'bg-gray-50 text-gray-600 border-gray-200'
                         }`}>
                           {record.result ?? record.status}
                         </Badge>
@@ -268,7 +274,7 @@ export default function ExplorerPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-4 text-zinc-500">
+                <div className="text-center py-4 text-gray-500">
                   No verifications found for this slot
                 </div>
               )}
@@ -282,23 +288,23 @@ export default function ExplorerPage() {
 
       {/* Service Info */}
       {networkData.serviceInfo && (
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="card-clean">
           <CardHeader>
-            <CardTitle>Service Details</CardTitle>
+            <CardTitle className="text-[#1a1a1a]">Service Details</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <div className="text-xs text-zinc-500 mb-1">Name</div>
-                <div className="font-medium">{networkData.serviceInfo.name}</div>
+                <div className="text-xs text-gray-500 mb-1">Name</div>
+                <div className="font-medium text-[#1a1a1a]">{networkData.serviceInfo.name}</div>
               </div>
               <div>
-                <div className="text-xs text-zinc-500 mb-1">Version</div>
-                <div className="font-medium">v{networkData.serviceInfo.version}</div>
+                <div className="text-xs text-gray-500 mb-1">Version</div>
+                <div className="font-medium text-[#1a1a1a]">v{networkData.serviceInfo.version}</div>
               </div>
               <div>
-                <div className="text-xs text-zinc-500 mb-1">Author</div>
-                <div className="font-medium">{networkData.serviceInfo.author}</div>
+                <div className="text-xs text-gray-500 mb-1">Author</div>
+                <div className="font-medium text-[#1a1a1a]">{networkData.serviceInfo.author}</div>
               </div>
             </div>
           </CardContent>
@@ -309,7 +315,7 @@ export default function ExplorerPage() {
       <div className="flex justify-center gap-4">
         <Link
           href="/verify"
-          className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+          className="btn-primary"
         >
           Submit Verification
         </Link>
@@ -319,6 +325,7 @@ export default function ExplorerPage() {
             setHistoryKey(k => k + 1);
             window.location.reload();
           }}
+          className="border-gray-200 text-gray-600 hover:text-[#1a1a1a] hover:bg-gray-50"
         >
           Refresh Data
         </Button>
@@ -326,7 +333,7 @@ export default function ExplorerPage() {
 
       {/* Network Error */}
       {networkData.error && (
-        <div className="text-center text-sm text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+        <div className="text-center text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
           {networkData.error}. Showing local history only.
         </div>
       )}

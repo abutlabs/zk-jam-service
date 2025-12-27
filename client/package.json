@@ -2,7 +2,7 @@
   "name": "jam-service-client",
   "version": "1.0.0",
   "type": "module",
-  "description": "TypeScript client for interacting with my-jam-service on JAM",
+  "description": "TypeScript client for interacting with zk-jam-service on JAM",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

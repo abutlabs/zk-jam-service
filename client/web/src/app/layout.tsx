@@ -1,21 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans, Roboto_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/layout/Header";
+import { Providers } from "@/components/Providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSans = DM_Sans({
+  variable: "--font-dm-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const robotoMono = Roboto_Mono({
+  variable: "--font-roboto-mono",
   subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
-  title: "JAM Service Dashboard",
-  description: "Visual dashboard for JAM (Join-Accumulate Machine) services and ZK proof verification",
+  title: "ZK JAM Service | Polkadot",
+  description: "Zero-knowledge proof verification on JAM (Join-Accumulate Machine) - P",
 };
 
 export default function RootLayout({
@@ -24,14 +27,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-zinc-100 min-h-screen`}
+        className={`${dmSans.variable} ${robotoMono.variable} font-sans antialiased bg-background text-foreground min-h-screen`}
       >
-        <Header />
-        <main className="container mx-auto px-4 py-8">
-          {children}
-        </main>
+        <Providers>
+          <Header />
+          <main>
+            {children}
+          </main>
+        </Providers>
       </body>
     </html>
   );

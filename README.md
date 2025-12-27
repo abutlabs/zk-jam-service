@@ -142,6 +142,9 @@ jam-pvm-build
 # 3. Deploy service (returns Service ID)
 ./polkajam-nightly/jamt create-service zk-jam-service.jam
 
+# 4. Start the JAM Dashboard 
+./polkajam-nightly/jamtop
+
 # 4. Submit a verification
 cd client && npx tsx src/hash-verify.ts "hello world"
 ```

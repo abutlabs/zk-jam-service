@@ -118,7 +118,7 @@ export default function LearnPage() {
             <div className="bg-gray-50 rounded-lg p-4 space-y-2 border border-gray-200">
               <div className="text-2xl font-bold text-[#1a1a1a]">6 seconds</div>
               <div className="text-sm text-gray-500">
-                Per work item in Refine vs ~10ms in traditional blockchains
+                Compute budget per work item (vs ~10ms limit on traditional chains)
               </div>
             </div>
             <div className="bg-gray-50 rounded-lg p-4 space-y-2 border border-gray-200">

@@ -1,0 +1,68 @@
+# Run zk-jam-service on Lasair, end to end, with one command:
+#
+#   docker compose up
+#   # then open http://localhost:3000  (set service id 1729, go to /verify)
+#
+# Three services:
+#   lasair-node  the JAM node (ghcr.io/abutlabs/lasair-node) hosting the service
+#   deploy       one-shot: waits for the node, deploys zk-jam-service.jam -> id 1729
+#   web          the Next.js dashboard, JAM_BACKEND=lasair, pointed at the node
+#
+# This is the LASAIR path. The PolkaJam path stays the local flow in README.md
+# (the polkajam-nightly binaries are not containerized here).
+#
+# Note: `lasair-node` is pulled from GHCR — it must be published (abutlabs/lasair
+# publish-node.yml) and the package made public, or run `docker login ghcr.io`.
+
+services:
+  lasair-node:
+    image: ghcr.io/abutlabs/lasair-node:latest
+    ports:
+      - "19900:19900"
+    # healthcheck is baked into the image (GET /v1/healthz)
+    restart: unless-stopped
+
+  deploy:
+    image: node:20-bookworm-slim
+    depends_on:
+      lasair-node:
+        condition: service_healthy
+    environment:
+      LASAIR_RPC: http://lasair-node:19900
+    volumes:
+      - ./zk-jam-service.jam:/work/zk-jam-service.jam:ro
+    # Deploy the bundled service blob; the first deploy on a fresh node is id 1729.
+    command:
+      - node
+      - -e
+      - |
+        const fs = require('fs');
+        const rpc = process.env.LASAIR_RPC;
+        (async () => {
+          const jam = fs.readFileSync('/work/zk-jam-service.jam').toString('hex');
+          const r = await fetch(rpc + '/v1/service', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ jam_hex: jam }),
+          });
+          const j = await r.json();
+          if (!r.ok || j.error) { console.error('deploy failed:', j.error || r.status); process.exit(1); }
+          console.log('deployed zk-jam-service -> service_id', j.service_id);
+        })().catch((e) => { console.error(e); process.exit(1); });
+    restart: "no"
+
+  web:
+    image: ghcr.io/abutlabs/zk-jam-service-web:latest
+    build:
+      context: ./client/web
+    depends_on:
+      deploy:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    environment:
+      JAM_BACKEND: lasair
+      LASAIR_RPC: http://lasair-node:19900
+      JAM_SERVICE_ID: "1729"
+      NEXT_PUBLIC_JAM_SERVICE_ID: "1729"
+    restart: unless-stopped

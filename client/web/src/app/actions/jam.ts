@@ -1,47 +1,14 @@
 'use server';
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { createHash } from 'crypto';
-import path from 'path';
-
-const execAsync = promisify(exec);
-
-// Path to jamt binary (relative to project root)
-const JAMT_PATH = path.resolve(process.cwd(), '../../polkajam-nightly/jamt');
-
-interface ExecResult {
-  success: boolean;
-  output: string;
-  error?: string;
-}
-
-async function runJamt(args: string[]): Promise<ExecResult> {
-  try {
-    const { stdout, stderr } = await execAsync(`${JAMT_PATH} ${args.join(' ')}`, {
-      timeout: 30000,
-    });
-    return { success: true, output: stdout.trim() };
-  } catch (error: unknown) {
-    const err = error as { stdout?: string; stderr?: string; message?: string };
-    return {
-      success: false,
-      output: err.stdout ?? '',
-      error: err.stderr ?? err.message ?? 'Unknown error',
-    };
-  }
-}
+import { getBackend, backendName } from '../../lib/jam-backend';
 
 /**
  * Get current slot from the network
  */
 export async function getCurrentSlot(): Promise<{ slot: number | null; error?: string }> {
-  const result = await runJamt(['inspect', 'best', 'slot']);
-  if (result.success) {
-    const slot = parseInt(result.output, 10);
-    return { slot: isNaN(slot) ? null : slot };
-  }
-  return { slot: null, error: result.error };
+  const slot = await getBackend().readSlot();
+  return slot === null ? { slot: null, error: 'Cannot reach JAM node' } : { slot };
 }
 
 /**
@@ -52,18 +19,7 @@ export async function getServiceInfo(serviceId: string): Promise<{
   version: string;
   author: string;
 } | null> {
-  const result = await runJamt(['inspect', 'best', 'service', serviceId]);
-  if (!result.success) return null;
-
-  // Parse: "Service zk-jam-service v0.1.0 by abutlabs <abutlabs@gmx.com>"
-  const match = result.output.match(/Service\s+(\S+)\s+v(\S+)\s+by\s+(.+)/);
-  if (!match) return null;
-
-  return {
-    name: match[1] ?? '',
-    version: match[2] ?? '',
-    author: match[3] ?? '',
-  };
+  return getBackend().serviceInfo(serviceId);
 }
 
 /**
@@ -73,16 +29,14 @@ export async function getStorageValue(
   serviceId: string,
   key: string
 ): Promise<{ value: string | null; error?: string }> {
-  // Convert key to hex if not already
   const keyHex = key.startsWith('0x')
     ? key
     : '0x' + Buffer.from(key, 'utf8').toString('hex');
-
-  const result = await runJamt(['inspect', 'best', 'storage', serviceId, keyHex]);
-  if (result.success) {
-    return { value: result.output || null };
+  try {
+    return { value: await getBackend().readStorage(serviceId, keyHex) };
+  } catch (e) {
+    return { value: null, error: (e as Error).message };
   }
-  return { value: null, error: result.error };
 }
 
 /**
@@ -106,48 +60,37 @@ export async function submitHashVerification(
   success: boolean;
   hash: string;
   payload: string;
+  verdict?: 'valid' | 'invalid' | 'unknown';
   packageId?: string;
   slot?: number;
   error?: string;
 }> {
-  // Compute hash
   const preimageBuffer = Buffer.from(preimage, 'utf8');
   const hashBuffer = createHash('blake2s256').update(preimageBuffer).digest();
 
-  // Optionally tamper with hash
-  let expectedHash = Buffer.from(hashBuffer);
-  if (tamper) {
-    expectedHash[0] = (expectedHash[0]! + 1) % 256;
-  }
+  const expectedHash = Buffer.from(hashBuffer);
+  if (tamper) expectedHash[0] = (expectedHash[0]! + 1) % 256;
 
-  // Build payload: [32 bytes hash] + [preimage bytes]
+  // payload = [32 bytes expected-hash] + [preimage bytes]
   const payload = Buffer.concat([expectedHash, preimageBuffer]);
   const payloadHex = '0x' + payload.toString('hex');
   const hashHex = '0x' + hashBuffer.toString('hex');
 
-  // Submit via jamt
-  const result = await runJamt(['item', serviceId, payloadHex]);
-
-  if (result.success) {
-    // Parse output for package ID and slot
-    // "Item submitted in package 0x... with anchor at #123"
-    const packageMatch = result.output.match(/package\s+(0x[a-f0-9]+)/i);
-    const slotMatch = result.output.match(/anchor at #(\d+)/);
-
-    return {
-      success: true,
-      hash: hashHex,
-      payload: payloadHex,
-      packageId: packageMatch?.[1],
-      slot: slotMatch ? parseInt(slotMatch[1], 10) : undefined,
-    };
+  const result = await getBackend().submitItem(serviceId, payloadHex);
+  if (!result.success) {
+    return { success: false, hash: hashHex, payload: payloadHex, error: result.error };
   }
 
+  // PolkaJam prints "package 0x.. anchor at #123"; Lasair returns the verdict inline.
+  const packageMatch = result.raw.match(/package\s+(0x[a-f0-9]+)/i);
+  const slotMatch = result.raw.match(/anchor at #(\d+)/);
   return {
-    success: false,
+    success: true,
     hash: hashHex,
     payload: payloadHex,
-    error: result.error,
+    verdict: result.verdict,
+    packageId: packageMatch?.[1],
+    slot: slotMatch ? parseInt(slotMatch[1], 10) : undefined,
   };
 }
 
@@ -160,9 +103,8 @@ export async function getRecentActivity(): Promise<{
 }> {
   const { slot } = await getCurrentSlot();
   const recentSlots = slot
-    ? Array.from({ length: 10 }, (_, i) => slot - i).filter(s => s > 0)
+    ? Array.from({ length: 10 }, (_, i) => slot - i).filter((s) => s > 0)
     : [];
-
   return { currentSlot: slot, recentSlots };
 }
 
@@ -174,62 +116,38 @@ interface JamServiceInfo {
 }
 
 /**
- * Get list of available services on the chain
- * Since there's no direct API to enumerate services, we probe known IDs
+ * Get list of available services on the chain.
+ * PolkaJam: probe known IDs. Lasair: the configured hosted service.
  */
 export async function getServices(): Promise<{
   services: JamServiceInfo[];
   error?: string;
 }> {
-  // First check if we can connect by getting the current slot
-  const slotResult = await getCurrentSlot();
-  if (slotResult.error || slotResult.slot === null) {
+  const backend = getBackend();
+  const slot = await backend.readSlot();
+  if (slot === null) {
+    return { services: [], error: 'Cannot connect to JAM node' };
+  }
+
+  if (backendName() === 'lasair') {
+    const id =
+      process.env.NEXT_PUBLIC_JAM_SERVICE_ID ?? process.env.JAM_SERVICE_ID ?? '1729';
+    const info = await backend.serviceInfo(id);
     return {
-      services: [],
-      error: slotResult.error || 'Cannot connect to JAM network',
+      services: info ? [{ id, name: info.name, version: info.version, author: info.author }] : [],
     };
   }
 
-  const services: JamServiceInfo[] = [];
-
-  // Always check bootstrap service (ID 0)
-  const bootstrapInfo = await getServiceInfo('00000000');
-  if (bootstrapInfo) {
-    services.push({
-      id: '00000000',
-      name: bootstrapInfo.name || 'Bootstrap Service',
-      version: bootstrapInfo.version,
-      author: bootstrapInfo.author,
-    });
-  }
-
-  // Probe a range of service IDs to discover services
-  // Services are created with sequential-ish IDs, but could be anywhere
-  // We'll check some known patterns and recent IDs
-  const idsToProbe = [
-    // Check first few sequential IDs
-    '00000001', '00000002', '00000003', '00000004', '00000005',
-    // Check some hash-like IDs that might be from create-service
-    // These are examples - real IDs would come from service creation
-  ];
-
-  // Try to probe IDs in parallel
-  const probeResults = await Promise.all(
-    idsToProbe.map(async (id) => {
-      const info = await getServiceInfo(id);
-      if (info && info.name) {
-        return { id, ...info };
-      }
-      return null;
+  // PolkaJam: probe the bootstrap + first few sequential IDs.
+  const ids = ['00000000', '00000001', '00000002', '00000003', '00000004', '00000005'];
+  const probed = await Promise.all(
+    ids.map(async (id) => {
+      const info = await backend.serviceInfo(id);
+      return info && info.name ? { id, ...info } : null;
     })
   );
-
-  for (const result of probeResults) {
-    if (result && !services.some(s => s.id === result.id)) {
-      services.push(result);
-    }
-  }
-
+  const services: JamServiceInfo[] = [];
+  for (const r of probed) if (r && !services.some((s) => s.id === r.id)) services.push(r);
   return { services };
 }
 
@@ -237,17 +155,12 @@ export async function getServices(): Promise<{
  * Check if a specific service exists and get its info
  */
 export async function checkService(serviceId: string): Promise<JamServiceInfo | null> {
-  // Normalize the service ID
-  const normalizedId = serviceId.toLowerCase().replace(/^0x/, '').padStart(8, '0');
-
-  const info = await getServiceInfo(normalizedId);
-  if (info && info.name) {
-    return {
-      id: normalizedId,
-      name: info.name,
-      version: info.version,
-      author: info.author,
-    };
-  }
-  return null;
+  const normalizedId =
+    backendName() === 'lasair'
+      ? serviceId
+      : serviceId.toLowerCase().replace(/^0x/, '').padStart(8, '0');
+  const info = await getBackend().serviceInfo(normalizedId);
+  return info && info.name
+    ? { id: normalizedId, name: info.name, version: info.version, author: info.author }
+    : null;
 }

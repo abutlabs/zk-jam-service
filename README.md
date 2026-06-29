@@ -56,11 +56,74 @@ We're not building new ZK systems—we're building the PVM-compatible wrapper th
 
 ## Running the full stack
 
-The app is three tiers — a **JAM service** (Rust → PolkaVM), a **JAM node**
-(`polkajam-nightly`, the PolkaJam reference node) that runs it, and a **front-end**
-(a Next.js web dashboard and a TypeScript CLI) that submits work and reads results.
-The front-end never talks to the service directly: it shells out to the `jamt`
-CLI, which speaks WebSocket RPC to the node at `ws://localhost:19800`.
+The app is three tiers — a **JAM service** (Rust → PolkaVM), a **JAM node** that
+runs it, and a **front-end** (a Next.js web dashboard + a TypeScript CLI) that
+submits work and reads results. The front-end reaches whichever node you choose
+through a backend switch (the `JAM_BACKEND` env var):
+
+| `JAM_BACKEND` | Node | How the front-end reaches it |
+|---------------|------|------------------------------|
+| `lasair` | **Lasair** — an original-work OCaml JAM client (`ghcr.io/abutlabs/lasair-node`) | HTTP operator RPC at `LASAIR_RPC` (`:19900`) |
+| `polkajam` *(CLI default)* | **PolkaJam** reference node (`polkajam-nightly`) | shells the bundled `jamt` CLI over `ws://localhost:19800` |
+
+The **same** service blob (`zk-jam-service.jam`) runs unchanged on either node —
+that's the whole point: if Lasair is conformant, a service proven on PolkaJam
+behaves byte-identically on Lasair. Pick a path:
+
+---
+
+### Option A — Lasair, one command (`docker compose up`)
+
+Runs the entire stack on **Lasair** in containers — the node, a one-shot deploy,
+and the dashboard — with nothing to build or install locally:
+
+```bash
+docker compose up
+# then open http://localhost:3000  (service id 1729 is pre-deployed → go to /verify)
+```
+
+`docker-compose.yml` brings up three services:
+
+| Service | Image | Role |
+|---------|-------|------|
+| `lasair-node` | `ghcr.io/abutlabs/lasair-node` | the JAM node; hosts the service, HTTP RPC on `:19900` (healthcheck-gated) |
+| `deploy` | `node:20-slim` (one-shot) | waits for the node, POSTs `zk-jam-service.jam` → **service id 1729** |
+| `web` | `ghcr.io/abutlabs/zk-jam-service-web` | the Next.js dashboard, `JAM_BACKEND=lasair`, on `:3000` |
+
+> **The GHCR images must be public** — or run `docker login ghcr.io` first. The
+> packages are `lasair-node` and `zk-jam-service-web` under `abutlabs`. (The web
+> image also has a local `build: ./client/web` fallback in the compose file, so it
+> builds itself if the published image isn't pullable.)
+
+Want to drive the node directly? The operator RPC is plain HTTP/JSON:
+
+```bash
+curl -s localhost:19900/v1/head                                  # node alive + head slot
+# submit a verification — payload = blake2s256("hello") ++ "hello":
+curl -s -XPOST localhost:19900/v1/service/1729/item \
+  -H content-type:application/json \
+  -d '{"payload_hex":"19213bacc58dee6dbde3ceb9a47cbb330b3d86f8cca8997eb00be456f140ca2568656c6c6f"}'
+# -> {"verdict":"valid","refine_output_hex":"...","storage":[...]}
+curl -s localhost:19900/v1/service/1729/storage/636f756e74        # read "count" -> value hex
+```
+
+To point the **CLI** (`client/`) or a locally-run dashboard at Lasair instead of
+PolkaJam, just flip the backend env vars (no code change):
+
+```bash
+export JAM_BACKEND=lasair LASAIR_RPC=http://localhost:19900
+cd client && npm install
+JAM_SERVICE_ID=1729 npx tsx src/hash-verify.ts --preimage "hello" --submit
+JAM_SERVICE_ID=1729 npx tsx src/query-state.ts count
+```
+
+---
+
+### Option B — PolkaJam (local reference binaries)
+
+Runs the stack against the bundled **PolkaJam** reference node. The front-end never
+talks to the service directly here: it shells out to the `jamt` CLI, which speaks
+WebSocket RPC to the node at `ws://localhost:19800`.
 
 ```
  Web UI (:3000)  ──server action──▶  jamt  ──ws://localhost:19800──▶  polkajam node
@@ -167,11 +230,16 @@ cd client/web && npm install && npm run dev
 ```
 zk-jam-service/
 ├── src/lib.rs              # JAM service (Rust, no_std, PolkaVM)
+├── zk-jam-service.jam      # prebuilt service blob (runs on PolkaJam *or* Lasair)
 ├── client/                 # CLI tooling (TypeScript)
 │   └── src/
+│       ├── backends/       # the polkajam | lasair switch (JAM_BACKEND)
+│       │   ├── polkajam.ts # shells the jamt CLI
+│       │   └── lasair.ts   # HTTP operator RPC (LASAIR_RPC)
 │       ├── hash-verify.ts  # Submit verifications
 │       └── query-state.ts  # Read service storage
-├── client/web/             # Web dashboard (Next.js)
+├── client/web/             # Web dashboard (Next.js); same backend switch
+├── docker-compose.yml      # one-command Lasair stack (node + deploy + web)
 └── grant-proposal.md       # Web3 Foundation grant application
 ```
 

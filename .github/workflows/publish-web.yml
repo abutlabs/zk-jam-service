@@ -1,0 +1,62 @@
+name: Publish web dashboard (GHCR)
+
+# Builds the zk-jam-service Next.js dashboard image and publishes it to GHCR.
+# Backend-switchable at run time (JAM_BACKEND=polkajam|lasair); the docker-compose
+# at the repo root runs it against a lasair-node.
+#
+# Trigger manually (workflow_dispatch) or by pushing to main / a v* tag.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'client/web/**'
+      - '.github/workflows/publish-web.yml'
+    tags:
+      - 'v*'
+
+env:
+  IMAGE: ghcr.io/abutlabs/zk-jam-service-web
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tag
+        id: tag
+        run: |
+          REF="${GITHUB_REF_NAME}"
+          echo "tag=${REF#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./client/web
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          provenance: true
+
+      - name: Summary
+        run: |
+          echo "Published web dashboard image:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${IMAGE}:${{ steps.tag.outputs.tag }}\` (+ \`:${GITHUB_SHA}\`, \`:latest\`)" >> "$GITHUB_STEP_SUMMARY"

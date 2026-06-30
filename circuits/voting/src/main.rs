@@ -138,44 +138,125 @@ fn merkle_root_and_path(
     (level[0], siblings, bits)
 }
 
+type Pk = ark_groth16::ProvingKey<Bn254>;
+
+fn build_eligibility(cfg: &PoseidonConfig<Fr>, n: usize) -> (Vec<Fr>, Vec<Fr>) {
+    let secrets: Vec<Fr> = (0..n).map(|i| Fr::from((1000 + i) as u64)).collect();
+    let leaves: Vec<Fr> = secrets.iter().map(|s| hash_native(cfg, &[*s])).collect();
+    (secrets, leaves)
+}
+
+// Deterministic setup (seed 7) — pk/vk match the embedded vk so any member's proof
+// verifies against the deployed service. Structure-only; witness values don't matter.
+fn setup(cfg: &PoseidonConfig<Fr>, leaves: &[Fr], secrets: &[Fr], poll_id: Fr) -> Pk {
+    let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(7);
+    let (root, siblings, path_bits) = merkle_root_and_path(cfg, leaves, 0);
+    let nullifier = hash_native(cfg, &[secrets[0], poll_id]);
+    let c = VoteCircuit {
+        cfg: cfg.clone(), root, nullifier, poll_id, vote: Fr::one(),
+        secret: secrets[0], siblings, path_bits,
+    };
+    Groth16::<Bn254>::circuit_specific_setup(c, &mut rng).unwrap().0
+}
+
+// A real ballot: proof ++ nullifier(32) ++ vote(1), hex. Fresh proof randomness
+// per call (proper ZK). The nullifier is deterministic per (voter, poll).
+fn make_submission(
+    cfg: &PoseidonConfig<Fr>, pk: &Pk, leaves: &[Fr], secrets: &[Fr],
+    poll_id: Fr, voter: usize, vote_byte: u8,
+) -> String {
+    // fresh-ish proof randomness per call (demo; a real deployment needs a CSPRNG)
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
+        ^ ((voter as u64) << 8)
+        ^ (vote_byte as u64);
+    let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(seed);
+    let (root, siblings, path_bits) = merkle_root_and_path(cfg, leaves, voter);
+    let nullifier = hash_native(cfg, &[secrets[voter], poll_id]);
+    let c = VoteCircuit {
+        cfg: cfg.clone(), root, nullifier, poll_id, vote: Fr::from(vote_byte as u64),
+        secret: secrets[voter], siblings, path_bits,
+    };
+    let proof = Groth16::<Bn254>::prove(pk, c, &mut rng).unwrap();
+    let mut sub = Vec::new();
+    proof.serialize_compressed(&mut sub).unwrap();
+    let mut nb = Vec::new();
+    nullifier.serialize_compressed(&mut nb).unwrap();
+    sub.extend_from_slice(&nb);
+    sub.push(vote_byte);
+    sub.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+// ---- prover sidecar: a tiny HTTP server the web calls per ballot -----------
+fn query_param(path: &str, key: &str) -> Option<String> {
+    let q = path.split('?').nth(1)?;
+    q.split('&').find_map(|kv| {
+        let mut it = kv.splitn(2, '=');
+        if it.next()? == key { Some(it.next()?.to_string()) } else { None }
+    })
+}
+
+fn serve(addr: &str, cfg: &PoseidonConfig<Fr>, leaves: &[Fr], secrets: &[Fr], poll_id: Fr, n: usize) {
+    use std::io::{BufRead, BufReader, Write};
+    let pk = setup(cfg, leaves, secrets, poll_id);
+    eprintln!("voting-prover: setup done; {n} eligible members; listening on {addr}");
+    let listener = std::net::TcpListener::bind(addr).expect("bind");
+    for stream in listener.incoming() {
+        let mut stream = match stream { Ok(s) => s, Err(_) => continue };
+        let mut line = String::new();
+        if BufReader::new(&mut stream).read_line(&mut line).is_err() { continue; }
+        let path = line.split_whitespace().nth(1).unwrap_or("/");
+        let (status, body): (&str, String) = if path.starts_with("/healthz") {
+            ("200 OK", "{\"status\":\"ok\"}".into())
+        } else if path.starts_with("/members") {
+            ("200 OK", format!("{{\"count\":{n}}}"))
+        } else if path.starts_with("/prove") {
+            match (query_param(path, "voter").and_then(|s| s.parse::<usize>().ok()),
+                   query_param(path, "vote").and_then(|s| s.parse::<u8>().ok())) {
+                (Some(v), Some(b)) if v < n && b <= 1 => {
+                    let hex = make_submission(cfg, &pk, leaves, secrets, poll_id, v, b);
+                    ("200 OK", format!("{{\"submission_hex\":\"{hex}\"}}"))
+                }
+                _ => ("400 Bad Request", "{\"error\":\"voter 0..n-1, vote 0|1\"}".into()),
+            }
+        } else {
+            ("404 Not Found", "{\"error\":\"no route\"}".into())
+        };
+        let resp = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let _ = stream.write_all(resp.as_bytes());
+    }
+}
+
 fn main() {
     let cfg = poseidon_config();
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(7);
 
     // eligibility set: 16 members, each commitment = H(secret_i)
     let n = 1usize << DEPTH;
-    let secrets: Vec<Fr> = (0..n).map(|i| Fr::from((1000 + i) as u64)).collect();
-    let leaves: Vec<Fr> = secrets.iter().map(|s| hash_native(&cfg, &[*s])).collect();
-
+    let (secrets, leaves) = build_eligibility(&cfg, n);
     let poll_id = Fr::from(42u64);
-
-    // `prove <voter 0..N-1> <vote 0|1>`: emit a real submission (proof ++ nullifier
-    // ++ vote) as hex for any eligible member — what the web/client calls per ballot.
-    // Deterministic setup (seed 7) => the pk/vk match the embedded vk, so any member's
-    // proof verifies against the deployed service.
     let argv: Vec<String> = std::env::args().collect();
+
+    // `serve <addr>`: run the prover sidecar (HTTP) — what the web calls per ballot.
+    if argv.len() >= 2 && argv[1] == "serve" {
+        let addr = argv.get(2).map(String::as_str).unwrap_or("0.0.0.0:9090");
+        serve(addr, &cfg, &leaves, &secrets, poll_id, n);
+        return;
+    }
+    // `prove <voter 0..N-1> <vote 0|1>`: emit one real submission hex.
     if argv.len() >= 2 && argv[1] == "prove" {
         let voter: usize = argv.get(2).and_then(|s| s.parse().ok())
             .expect("usage: prove <voter 0..15> <vote 0|1>");
         let vote_byte: u8 = argv.get(3).and_then(|s| s.parse().ok()).filter(|v| *v <= 1)
             .expect("usage: prove <voter 0..15> <vote 0|1>");
         assert!(voter < n, "voter index out of range");
-        let (root, siblings, path_bits) = merkle_root_and_path(&cfg, &leaves, voter);
-        let nullifier = hash_native(&cfg, &[secrets[voter], poll_id]);
-        let circuit = VoteCircuit {
-            cfg: cfg.clone(), root, nullifier, poll_id, vote: Fr::from(vote_byte as u64),
-            secret: secrets[voter], siblings, path_bits,
-        };
-        let (pk, _vk) =
-            Groth16::<Bn254>::circuit_specific_setup(circuit.clone(), &mut rng).unwrap();
-        let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng).unwrap();
-        let mut sub = Vec::new();
-        proof.serialize_compressed(&mut sub).unwrap();
-        let mut nb = Vec::new();
-        nullifier.serialize_compressed(&mut nb).unwrap();
-        sub.extend_from_slice(&nb);
-        sub.push(vote_byte);
-        println!("{}", sub.iter().map(|b| format!("{:02x}", b)).collect::<String>());
+        let pk = setup(&cfg, &leaves, &secrets, poll_id);
+        println!("{}", make_submission(&cfg, &pk, &leaves, &secrets, poll_id, voter, vote_byte));
         return;
     }
 

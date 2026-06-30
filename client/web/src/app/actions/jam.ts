@@ -40,6 +40,52 @@ export async function getStorageValue(
 }
 
 /**
+ * Cast an anonymous vote. Asks the prover sidecar for a ZK proof that an eligible
+ * member is voting (without revealing which member), then submits it to the JAM
+ * service: refine verifies the proof, accumulate tallies it and rejects a re-used
+ * nullifier (double-vote). The voter's identity never reaches the chain.
+ */
+export async function submitVote(
+  serviceId: string,
+  voter: number,
+  vote: 0 | 1
+): Promise<{ success: boolean; verdict?: string; error?: string }> {
+  const proverUrl = process.env.PROVER_URL ?? 'http://prover:9090';
+  try {
+    const r = await fetch(`${proverUrl}/prove?voter=${voter}&vote=${vote}`);
+    const j = await r.json();
+    if (!r.ok || j.error || !j.submission_hex) {
+      return { success: false, error: j.error || `prover error ${r.status}` };
+    }
+    const result = await getBackend().submitItem(serviceId, '0x' + j.submission_hex);
+    return { success: result.success, verdict: result.verdict };
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+/** Read the on-chain tally (yes / no / total) from the voting service storage. */
+export async function getVoteTally(
+  serviceId: string
+): Promise<{ yes: number; no: number; total: number; error?: string }> {
+  const leU64 = (hex: string | null): number => {
+    if (!hex) return 0;
+    const b = Buffer.from(hex.replace(/^0x/, ''), 'hex');
+    let n = 0;
+    for (let i = b.length - 1; i >= 0; i--) n = n * 256 + b[i];
+    return n;
+  };
+  try {
+    const read = (k: string) =>
+      getBackend().readStorage(serviceId, '0x' + Buffer.from(k, 'utf8').toString('hex'));
+    const [yes, no, total] = await Promise.all([read('yes'), read('no'), read('total')]);
+    return { yes: leU64(yes), no: leU64(no), total: leU64(total) };
+  } catch (e) {
+    return { yes: 0, no: 0, total: 0, error: (e as Error).message };
+  }
+}
+
+/**
  * Compute Blake2s-256 hash
  */
 export async function computeBlake2sHash(preimage: string): Promise<string> {

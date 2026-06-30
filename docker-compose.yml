@@ -1,37 +1,75 @@
-# Run zk-jam-service on Lasair, end to end, with one command:
+# Run zk-jam-service on a LIVE 6-validator Lasair testnet, end to end, one command:
 #
-#   docker compose up
-#   # then open http://localhost:3000  (set service id 1729, go to /verify)
+#   docker compose up --build
+#   # watch the colour-coded testnet: every 6s one node "🚀 authored", five "⬇ imported"
+#   # then open http://localhost:3000  (service id 1729, go to /verify)
 #
-# Three services:
-#   lasair-node  the JAM node (ghcr.io/abutlabs/lasair-node) hosting the service
-#   deploy       one-shot: waits for the node, deploys zk-jam-service.jam -> id 1729
-#   web          the Next.js dashboard, JAM_BACKEND=lasair, pointed at the node
+# Everything builds FROM SOURCE for your machine's architecture (no prebuilt
+# images pulled) — see docs/RUN_FROM_SOURCE.md. The Lasair nodes build from the
+# sibling submodule ../lasair (Dockerfile.testnet); the web app from ./client/web.
 #
-# This is the LASAIR path. The PolkaJam path stays the local flow in README.md
-# (the polkajam-nightly binaries are not containerized here).
+# Topology:
+#   node0..node5  six separate Lasair validators, real TCP block gossip + leader
+#                 rotation + colour-coded logs. node0 ALSO hosts the operator RPC
+#                 (deploy / submit / storage) so the service lives ON the testnet.
+#   deploy        one-shot: waits for node0, deploys zk-jam-service.jam -> id 1729
+#   web           the Next.js dashboard, JAM_BACKEND=lasair, pointed at node0
 #
-# Note: `lasair-node` is pulled from GHCR — it must be published (abutlabs/lasair
-# publish-node.yml) and the package made public, or run `docker login ghcr.io`.
+# RPC: node0 -> host :19900 (the one the web app & deploy use); node1..5 -> :19901..5
+# (observe any node's head). The PolkaJam path stays the local flow in README.md.
+
+x-validator: &validator
+  build:
+    context: ../lasair
+    dockerfile: Dockerfile.testnet
+  image: lasair-testnet-node:local      # built once, shared by all six nodes
+  restart: unless-stopped
+  environment: &nodes
+    NODES: "node0:20000,node1:20000,node2:20000,node3:20000,node4:20000,node5:20000"
+    RPC_PORT: "19900"                    # every node serves the RPC internally…
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://localhost:19900/v1/healthz"]
+    interval: 5s
+    timeout: 3s
+    start_period: 8s
+    retries: 12
 
 services:
-  lasair-node:
-    image: ghcr.io/abutlabs/lasair-node:latest
-    ports:
-      - "19900:19900"
-    # healthcheck is baked into the image (GET /v1/healthz)
-    restart: unless-stopped
+  node0:                                 # …only node0's RPC is published + used
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "0"}
+    ports: ["19900:19900"]
+  node1:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "1"}
+    ports: ["19901:19900"]
+  node2:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "2"}
+    ports: ["19902:19900"]
+  node3:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "3"}
+    ports: ["19903:19900"]
+  node4:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "4"}
+    ports: ["19904:19900"]
+  node5:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "5"}
+    ports: ["19905:19900"]
 
   deploy:
     image: node:20-bookworm-slim
     depends_on:
-      lasair-node:
+      node0:
         condition: service_healthy
     environment:
-      LASAIR_RPC: http://lasair-node:19900
+      LASAIR_RPC: http://node0:19900
     volumes:
       - ./zk-jam-service.jam:/work/zk-jam-service.jam:ro
-    # Deploy the bundled service blob; the first deploy on a fresh node is id 1729.
+    # Deploy the bundled service blob onto node0; first deploy on a fresh node = id 1729.
     command:
       - node
       - -e
@@ -52,7 +90,6 @@ services:
     restart: "no"
 
   web:
-    image: ghcr.io/abutlabs/zk-jam-service-web:latest
     build:
       context: ./client/web
     depends_on:
@@ -62,7 +99,7 @@ services:
       - "3000:3000"
     environment:
       JAM_BACKEND: lasair
-      LASAIR_RPC: http://lasair-node:19900
+      LASAIR_RPC: http://node0:19900
       JAM_SERVICE_ID: "1729"
       NEXT_PUBLIC_JAM_SERVICE_ID: "1729"
     restart: unless-stopped

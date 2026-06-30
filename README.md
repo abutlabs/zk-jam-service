@@ -2,6 +2,17 @@
 
 **ZK proof verification for [JAM](https://graypaper.com) (Join-Accumulate Machine) — enabling trustless computation verification on Polkadot's next-generation architecture.**
 
+> **What this is now: anonymous, sybil-resistant voting.** The original hash-verify
+> demo was a wiring toy; the real app is a Groth16/BN254 circuit proving membership
+> in an eligibility set + a nullifier, verified **in `refine`** (~60 M gas), with the
+> tally and spent-nullifier registry in `accumulate`. The chain only ever sees
+> `{nullifier, tally}` — never the voter; double-votes are rejected.
+> `docker compose up --build` runs the 6-node testnet + the voting service + a prover
+> sidecar + the `/vote` web UI. Why JAM verifies cheaply *in-protocol* (vs Aztec's
+> client-side proving on scarce L1): [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md).
+> Circuit + service + prover: [`circuits/voting`](circuits/voting),
+> [`services/voting`](services/voting).
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![JAM](https://img.shields.io/badge/Platform-JAM%20%7C%20Polkadot-E6007A.svg)](https://graypaper.com)
 
@@ -17,6 +28,10 @@
 ```
 
 **Why JAM?** Traditional blockchains run all code on every validator (~10ms budget). JAM runs heavy computation on a few validators (6s budget), then all validators update state (<10ms). This 1000x reduction in redundant computation makes ZK verification practical.
+
+## Polkajam
+
+Running this repo (Polkajam mode) requires you to download and extract polkajam nightly build to the project root `polkajam-nightly/*`
 
 ## Core Logic
 
@@ -268,6 +283,18 @@ zk-jam-service/
 - [Polkadot Wiki](https://wiki.polkadot.network/docs/learn-jam-chain) — JAM overview
 - [Arkworks](https://arkworks.rs/) — ZK library documentation
 - [zk-proof-testing-plan.md](./zk-proof-testing-plan.md) — Detailed technical roadmap
+
+## The abutlabs JAM suite
+
+Three things we built on JAM — an independent client and two flagship services on
+it, each one-command-runnable:
+
+- **[lasair](https://github.com/abutlabs/lasair)** — an independent OCaml JAM client
+  (+ a live multi-node testnet that runs like PolkaJam).
+- **[zk-jam-service](https://github.com/abutlabs/zk-jam-service)** — this: anonymous,
+  sybil-resistant voting; a real ZK proof verified in `refine`.
+- **[marmalade](https://github.com/abutlabs/marmalade)** — a frequent-batch-auction
+  order-book DEX; matching in `refine`, MEV-resistant, settlement on-chain.
 
 ## License
 

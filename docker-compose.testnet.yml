@@ -1,0 +1,122 @@
+# Run zk-jam-service on a LIVE 6-validator Lasair testnet, one command, NO lasair source:
+#
+#   docker compose -f docker-compose.testnet.yml up --build
+#   # watch the colour-coded testnet: every 6s one node "🚀 authored", five "⬇ imported"
+#   # then open http://localhost:3000/vote   (service id 1729)
+#
+# The six validators are PULLED as a published multi-arch image
+# (ghcr.io/abutlabs/lasair-testnet-node) — native on amd64 AND arm64. Only the
+# prover + web app build from this repo. See docs/RUN_FROM_SOURCE.md.
+#   NOTE: the lasair-testnet-node GHCR package must be PUBLIC to pull it. If you hit
+#   an auth error, use the simpler single-node default instead: `docker compose up
+#   --build` (ghcr.io/abutlabs/lasair-node, already public).
+#
+# Topology:
+#   node0..node5  six separate Lasair validators, real TCP block gossip + leader
+#                 rotation + colour-coded logs. node0 ALSO hosts the operator RPC
+#                 (deploy / submit / storage) so the service lives ON the testnet.
+#   deploy        one-shot: waits for node0, deploys voting-service.jam -> id 1729
+#   web           the Next.js dashboard, JAM_BACKEND=lasair, pointed at node0
+#
+# RPC: node0 -> host :19900 (the one the web app & deploy use); node1..5 -> :19901..5
+# (observe any node's head).
+
+x-validator: &validator
+  image: ghcr.io/abutlabs/lasair-testnet-node:${LASAIR_TESTNET_TAG:-latest}  # pulled, any arch
+  restart: unless-stopped
+  environment: &nodes
+    NODES: "node0:20000,node1:20000,node2:20000,node3:20000,node4:20000,node5:20000"
+    RPC_PORT: "19900"                    # every node serves the RPC internally…
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://localhost:19900/v1/healthz"]
+    interval: 5s
+    timeout: 3s
+    start_period: 8s
+    retries: 12
+
+services:
+  node0:                                 # …only node0's RPC is published + used
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "0"}
+    ports: ["19900:19900"]
+  node1:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "1"}
+    ports: ["19901:19900"]
+  node2:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "2"}
+    ports: ["19902:19900"]
+  node3:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "3"}
+    ports: ["19903:19900"]
+  node4:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "4"}
+    ports: ["19904:19900"]
+  node5:
+    <<: *validator
+    environment: {<<: *nodes, NODE_INDEX: "5"}
+    ports: ["19905:19900"]
+
+  # the anonymous-voting prover sidecar: GET /prove?voter=N&vote=B -> a ZK proof.
+  # Built from source (circuits/voting). The web app calls it per ballot.
+  prover:
+    build:
+      context: ./circuits/voting
+    image: voting-prover:local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9090/healthz"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 12
+
+  deploy:
+    image: node:20-bookworm-slim
+    depends_on:
+      node0:
+        condition: service_healthy
+    environment:
+      LASAIR_RPC: http://node0:19900
+    volumes:
+      - ./services/voting/voting-service.jam:/work/voting-service.jam:ro
+    # Deploy the voting service onto node0; first deploy on a fresh node = id 1729.
+    command:
+      - node
+      - -e
+      - |
+        const fs = require('fs');
+        const rpc = process.env.LASAIR_RPC;
+        (async () => {
+          const jam = fs.readFileSync('/work/voting-service.jam').toString('hex');
+          const r = await fetch(rpc + '/v1/service', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ jam_hex: jam }),
+          });
+          const j = await r.json();
+          if (!r.ok || j.error) { console.error('deploy failed:', j.error || r.status); process.exit(1); }
+          console.log('deployed voting-service -> service_id', j.service_id);
+        })().catch((e) => { console.error(e); process.exit(1); });
+    restart: "no"
+
+  web:
+    build:
+      context: ./client/web
+    depends_on:
+      deploy:
+        condition: service_completed_successfully
+      prover:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      JAM_BACKEND: lasair
+      LASAIR_RPC: http://node0:19900
+      PROVER_URL: http://prover:9090
+      JAM_SERVICE_ID: "1729"
+      NEXT_PUBLIC_JAM_SERVICE_ID: "1729"
+    restart: unless-stopped

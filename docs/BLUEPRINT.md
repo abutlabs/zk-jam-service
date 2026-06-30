@@ -125,7 +125,19 @@ project on the unproven SNARK tier**, it produces a **sharp PolkaJam differentia
 point #2** — the orderbook DEX is just candidate #3 (verifiable matching) standing
 on the same commitment/nullifier primitives this service establishes.
 
-## 5. The one gate before promising v2: the gas spike
+## 5. The gate — RESOLVED ✅ (spike passed, build Tier B)
+
+**Measured 2026-06-30** (`spikes/groth16-gas/`): a full Groth16/BN254 verify of an
+**untrusted** (subgroup-checked) proof costs **56,149,565 gas in lasair's PVM =
+1.12% of G_R (5e9 full), 5.6% of tiny** — ~89 verifies per full refine. The
+verifier compiles to a **78 KB** `.jam` blob (limit 4 MB) and returned `valid`
+in-PVM. **Tier B (full zero-knowledge) is feasible — we build it.** (Surfaced +
+fixed two lasair caps that throttle any heavy refine: PVM guest stack size, and a
+10M step / 10M gas refine cap below G_R — see the spike README.)
+
+The original plan, kept for the record:
+
+### 5b. The one gate before promising v2: the gas spike
 
 Full-ZK (v2) needs an in-blob pairing verifier and **no JAM host crypto exists**, so
 we must *measure* before promising it:

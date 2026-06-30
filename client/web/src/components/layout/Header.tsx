@@ -7,7 +7,7 @@ import { ServiceSelector } from '@/components/ServiceSelector';
 
 const navItems = [
   { href: '/', label: 'Dashboard' },
-  { href: '/verify', label: 'Verify' },
+  { href: '/vote', label: 'Vote' },
   { href: '/explorer', label: 'Explorer' },
   { href: '/learn', label: 'Learn' },
 ];

@@ -147,9 +147,40 @@ fn main() {
     let secrets: Vec<Fr> = (0..n).map(|i| Fr::from((1000 + i) as u64)).collect();
     let leaves: Vec<Fr> = secrets.iter().map(|s| hash_native(&cfg, &[*s])).collect();
 
-    // member 5 casts a "yes" vote in poll 42
-    let voter = 5usize;
     let poll_id = Fr::from(42u64);
+
+    // `prove <voter 0..N-1> <vote 0|1>`: emit a real submission (proof ++ nullifier
+    // ++ vote) as hex for any eligible member — what the web/client calls per ballot.
+    // Deterministic setup (seed 7) => the pk/vk match the embedded vk, so any member's
+    // proof verifies against the deployed service.
+    let argv: Vec<String> = std::env::args().collect();
+    if argv.len() >= 2 && argv[1] == "prove" {
+        let voter: usize = argv.get(2).and_then(|s| s.parse().ok())
+            .expect("usage: prove <voter 0..15> <vote 0|1>");
+        let vote_byte: u8 = argv.get(3).and_then(|s| s.parse().ok()).filter(|v| *v <= 1)
+            .expect("usage: prove <voter 0..15> <vote 0|1>");
+        assert!(voter < n, "voter index out of range");
+        let (root, siblings, path_bits) = merkle_root_and_path(&cfg, &leaves, voter);
+        let nullifier = hash_native(&cfg, &[secrets[voter], poll_id]);
+        let circuit = VoteCircuit {
+            cfg: cfg.clone(), root, nullifier, poll_id, vote: Fr::from(vote_byte as u64),
+            secret: secrets[voter], siblings, path_bits,
+        };
+        let (pk, _vk) =
+            Groth16::<Bn254>::circuit_specific_setup(circuit.clone(), &mut rng).unwrap();
+        let proof = Groth16::<Bn254>::prove(&pk, circuit, &mut rng).unwrap();
+        let mut sub = Vec::new();
+        proof.serialize_compressed(&mut sub).unwrap();
+        let mut nb = Vec::new();
+        nullifier.serialize_compressed(&mut nb).unwrap();
+        sub.extend_from_slice(&nb);
+        sub.push(vote_byte);
+        println!("{}", sub.iter().map(|b| format!("{:02x}", b)).collect::<String>());
+        return;
+    }
+
+    // default mode: member 5 casts a "yes" vote in poll 42 (roundtrip + artifacts)
+    let voter = 5usize;
     let vote = Fr::one();
     let (root, siblings, path_bits) = merkle_root_and_path(&cfg, &leaves, voter);
     let nullifier = hash_native(&cfg, &[secrets[voter], poll_id]);

@@ -1,0 +1,22 @@
+[package]
+name = "voting-service"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["abutlabs <abutlabs@gmx.com>"]
+
+[dependencies]
+jam-pvm-common = { version = "0.1.26", default-features = false, features = ["service"] }
+polkavm-derive = "0.29"
+ark-bn254 = { version = "0.5", default-features = false, features = ["curve"] }
+ark-groth16 = { version = "0.5", default-features = false }
+ark-ec = { version = "0.5", default-features = false }
+ark-ff = { version = "0.5", default-features = false }
+ark-serialize = { version = "0.5", default-features = false }
+ark-snark = { version = "0.5", default-features = false }
+ark-std = { version = "0.5", default-features = false }
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = 'z'

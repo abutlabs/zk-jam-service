@@ -23,6 +23,7 @@ use ark_r1cs_std::{
 };
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_snark::SNARK;
+use ark_serialize::CanonicalSerialize;
 use ark_std::rand::SeedableRng;
 
 const DEPTH: usize = 4; // 16-leaf eligibility tree for the demo
@@ -183,7 +184,30 @@ fn main() {
     println!("tampered-nullifier proof verifies: {bad} (must be false)");
     assert!(!bad);
 
+    // ---- emit artifacts for the no_std service --------------------------------
+    // The service embeds {vk, root, poll_id} (one poll per deployment) and a voter
+    // submits payload = proof(compressed) ++ nullifier(32) ++ vote(1). Fixed-seed
+    // setup => reproducible demo (NOT a real trusted setup).
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("artifacts");
+    std::fs::create_dir_all(&dir).unwrap();
+    let ser = |x: &dyn Fn(&mut Vec<u8>)| { let mut b = Vec::new(); x(&mut b); b };
+    let vk_b = ser(&|b| vk.serialize_compressed(&mut *b).unwrap());
+    let root_b = ser(&|b| root.serialize_compressed(&mut *b).unwrap());
+    let poll_b = ser(&|b| poll_id.serialize_compressed(&mut *b).unwrap());
+    std::fs::write(dir.join("vk.bin"), &vk_b).unwrap();
+    std::fs::write(dir.join("root.bin"), &root_b).unwrap();
+    std::fs::write(dir.join("poll_id.bin"), &poll_b).unwrap();
+
+    let mut submission = Vec::new();
+    proof.serialize_compressed(&mut submission).unwrap();
+    let null_b = ser(&|b| nullifier.serialize_compressed(&mut *b).unwrap());
+    submission.extend_from_slice(&null_b);
+    submission.push(1u8); // vote = yes
+    std::fs::write(dir.join("submission.bin"), &submission).unwrap();
+
     println!(
-        "OK depth={DEPTH} leaves={n} root={root} nullifier={nullifier}"
+        "artifacts: vk={}B root={}B poll_id={}B submission={}B -> artifacts/",
+        vk_b.len(), root_b.len(), poll_b.len(), submission.len()
     );
+    println!("OK depth={DEPTH} leaves={n}");
 }

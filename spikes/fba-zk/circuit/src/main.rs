@@ -26,7 +26,7 @@ use ark_r1cs_std::{
     alloc::AllocVar, boolean::Boolean, eq::EqGadget, fields::fp::FpVar, fields::FieldVar,
     prelude::*,
 };
-use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef, SynthesisError};
 use ark_serialize::CanonicalSerialize;
 use ark_snark::SNARK;
 use ark_std::rand::SeedableRng;
@@ -71,6 +71,11 @@ fn ge(a: &FpVar<Fr>, b: &FpVar<Fr>) -> Result<Boolean<Fr>, SynthesisError> {
     let bits = bits_fixed(&t, WIDTH + 1)?;
     Ok(bits[WIDTH].clone())
 }
+// min(a, b) for bounded a,b, computed from the comparison (no extra witness).
+fn min_var(a: &FpVar<Fr>, b: &FpVar<Fr>) -> Result<FpVar<Fr>, SynthesisError> {
+    let a_le_b = ge(b, a)?; // b >= a  <=>  a is the min
+    a_le_b.select(a, b)
+}
 
 #[derive(Clone)]
 struct Order {
@@ -107,6 +112,10 @@ impl ConstraintSynthesizer<Fr> for FbaCircuit {
         let mut buy_vol = FpVar::<Fr>::zero();
         let mut sell_vol = FpVar::<Fr>::zero();
         let one = FpVar::one();
+        // keep per-order vars for the optimality pass
+        let mut is_sell_fps: Vec<FpVar<Fr>> = Vec::with_capacity(N);
+        let mut prices: Vec<FpVar<Fr>> = Vec::with_capacity(N);
+        let mut qtys: Vec<FpVar<Fr>> = Vec::with_capacity(N);
 
         for o in &self.orders {
             let is_sell = Boolean::new_witness(cs.clone(), || Ok(o.is_sell))?;
@@ -136,14 +145,40 @@ impl ConstraintSynthesizer<Fr> for FbaCircuit {
 
             // commitment inputs: side as field (0=buy,1=sell), price, qty
             order_hash_inputs.push(FpVar::from(is_sell));
-            order_hash_inputs.push(price);
-            order_hash_inputs.push(qty);
+            order_hash_inputs.push(price.clone());
+            order_hash_inputs.push(qty.clone());
             fill_hash_inputs.push(fill);
+            is_sell_fps.push(is_sell_fp);
+            prices.push(price);
+            qtys.push(qty);
         }
 
-        // base conservation at the uniform price: buys bought == sells sold == volume
+        // base conservation at the uniform price: buys bought == sells sold == volume.
+        // Combined with marketability + fill<=qty this already gives volume <= V(p*) =
+        // min(demand(p*), supply(p*)) — you can't fill more than is marketable at p*.
         buy_vol.enforce_equal(&vol_v)?;
         sell_vol.enforce_equal(&vol_v)?;
+
+        // OPTIMALITY: p* achieves the MAXIMUM matchable volume. V(p) = min(demand(p),
+        // supply(p)) changes value only at order limit prices, so its global max over all
+        // prices equals its max over the order prices. We enforce volume >= V(p_j) for every
+        // order price p_j; with volume <= V(p*) above, this forces volume == max_p V(p), i.e.
+        // p* is volume-maximizing (a matcher cannot under-fill to favour anyone).
+        for j in 0..N {
+            let pj = &prices[j];
+            let mut demand = FpVar::<Fr>::zero(); // Σ buy qty with price_i >= pj
+            let mut supply = FpVar::<Fr>::zero(); // Σ sell qty with price_i <= pj
+            for i in 0..N {
+                let buy_here = ge(&prices[i], pj)?; // price_i >= pj
+                let sell_here = ge(pj, &prices[i])?; // price_i <= pj
+                let is_buy = &one - &is_sell_fps[i];
+                demand += &is_buy * &qtys[i] * FpVar::from(buy_here);
+                supply += &is_sell_fps[i] * &qtys[i] * FpVar::from(sell_here);
+            }
+            let v_pj = min_var(&demand, &supply)?;
+            // achieved volume must be at least the matchable volume at this candidate price
+            ge(&vol_v, &v_pj)?.enforce_equal(&Boolean::TRUE)?;
+        }
 
         // binding: the private orders & fills hash to the public commitments
         hash_gadget(&self.cfg, cs.clone(), &order_hash_inputs)?.enforce_equal(&oc_v)?;
@@ -219,6 +254,39 @@ fn main() {
     .unwrap();
     println!("inflated-volume proof verifies: {bad} (must be false)");
     assert!(!bad);
+
+    // OPTIMALITY check (via direct constraint-satisfaction, the ground truth the SNARK enforces):
+    // the honest clearing satisfies the circuit; a SUBOPTIMAL clearing does NOT. At p*=105 only
+    // the 105-buy (5) crosses the 100-sell, so volume would be 5 — but V(100)=8 is achievable, so
+    // the optimality constraint (volume >= V(100)) is violated and the witness is unsatisfiable.
+    let satisfied = |c: FbaCircuit| -> bool {
+        let cs = ConstraintSystem::<Fr>::new_ref();
+        c.generate_constraints(cs.clone()).unwrap();
+        cs.is_satisfied().unwrap()
+    };
+    let honest = FbaCircuit {
+        cfg: cfg.clone(), orders_commitment: oc, price: Fr::from(price),
+        volume: Fr::from(volume), fills_commitment: fc, orders: orders.clone(),
+    };
+    assert!(satisfied(honest), "honest optimal clearing must satisfy the circuit");
+    let s = SCALE;
+    let subopt = vec![
+        Order { is_sell: false, price: 105 * s, qty: 5 * s, fill: 5 * s },
+        Order { is_sell: false, price: 100 * s, qty: 5 * s, fill: 0 },
+        Order { is_sell: true, price: 100 * s, qty: 8 * s, fill: 5 * s },
+        Order { is_sell: true, price: 110 * s, qty: 2 * s, fill: 0 },
+    ];
+    let sub_circuit = FbaCircuit {
+        cfg: cfg.clone(),
+        orders_commitment: commit_orders(&cfg, &subopt),
+        price: Fr::from(105 * s),
+        volume: Fr::from(5 * s),
+        fills_commitment: commit_fills(&cfg, &subopt),
+        orders: subopt,
+    };
+    assert!(!satisfied(sub_circuit),
+        "suboptimal clearing (p*=105, vol=5) must be UNSATISFIABLE — optimality not enforced!");
+    println!("optimality enforced: honest clearing satisfies; suboptimal (p*=105,vol=5) is UNSATISFIABLE ✓");
 
     // artifacts for the no_std service: embed vk; submit proof ++ [oc, price, volume, fc].
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("artifacts");

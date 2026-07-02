@@ -11,7 +11,7 @@ independent of order count. Measured e2e 2026-07-02.**
 
 | | |
 |---|---|
-| FBA-clearing proof verify (N=4 batch, 4 public inputs) | **60,084,701 gas** |
+| FBA-clearing proof verify (N=4 batch, 4 public inputs) | **~60.08M gas** |
 | … as fraction of G_R full (5e9) | **1.20 %** |
 | cost vs batch size | **flat** — 4 orders or 4000, same one verify |
 | on-chain footprint per batch | commitments + price + volume (orders never appear) |
@@ -21,7 +21,7 @@ Contrast: per-order verifiable decryption (option 2) costs ~n·5.6M gas *per ord
 batch proof beats it above ~10–20 orders, and stays flat where option 2 scales linearly — this
 is the crossover the vdec spike predicted.
 
-## What the circuit proves (and what it doesn't yet)
+## What the circuit proves
 
 Statement (fixed batch of N orders), in zero knowledge:
 
@@ -39,11 +39,17 @@ committed fills), fill an unmarketable order (`fill·(1−marketable)=0`), excee
 or break base conservation (`Σ buy fills = Σ sell fills = volume`). These are the properties
 that let a chain trust an off-chain match.
 
-**Not yet proven — price optimality:** that `p*` is the *volume-maximizing* uniform price (the
-FBA uniqueness property). That's an argmax over the aggregate demand/supply curves — a larger
-circuit layer (prove no other price on the tick grid yields more matched volume). The honest
-matcher is incentivised to pick the max, and optimality-enforcement is the documented next step;
-settlement-validity is the half that stops theft/fabrication and is what this spike demonstrates.
+**Proven — price optimality:** `p*` achieves the **maximum matchable volume** (the FBA
+uniqueness property), so a matcher cannot under-fill to favour anyone. `V(p) = min(demand(p),
+supply(p))` changes value only at order limit prices, so its global maximum over all prices
+equals its maximum over the order prices. The circuit enforces `volume >= V(p_j)` for every
+order price `p_j` (an O(N²) pass computing each candidate's demand/supply and their min inside
+the circuit); combined with `volume <= V(p*)` (which marketability + conservation already give),
+this forces `volume == max_p V(p)`. Verified two ways: the honest optimal clearing satisfies the
+circuit, and a **suboptimal** clearing (e.g. `p*=105` filling only 5 when 8 was matchable at 100)
+is **unsatisfiable** — asserted directly against the ConstraintSystem in `circuit/`. The optimality
+pass adds constraints (off-chain proving time) but **not public inputs**, so the refine verify
+gas is unchanged (~60M, measured before and after).
 
 ## Architecture (the JAM-side win)
 
@@ -83,4 +89,4 @@ docker rm -f fbabench
   uses a recursive/aggregation layer. Verify cost is ~flat in N (public inputs grow slightly).
 - Fixed-seed trusted setup (demo) — a real deployment needs a proper ceremony or a
   universal-setup system (a PLONK gas spike is the open item for that).
-- Optimality-of-p* is not enforced (see above). Settlement-validity + conservation are.
+- Optimality, settlement-validity, and conservation are all enforced (see above). The open circuit work is larger N (batch size) and a universal setup (PLONK) — not correctness.

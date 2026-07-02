@@ -1,0 +1,13 @@
+[package]
+name = "committee"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Offchain committee sidecar (std): keygen, encrypt, and produce proven partial decryptions. Emits vdec-service refine payloads for the gas bench."
+
+[[bin]]
+name = "gen-round"
+path = "src/main.rs"
+
+[dependencies]
+vdec-core = { path = "../vdec-core" }

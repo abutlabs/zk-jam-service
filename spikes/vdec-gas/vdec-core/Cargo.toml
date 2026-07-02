@@ -1,0 +1,17 @@
+[package]
+name = "vdec-core"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Verifiable threshold decryption (ECIES to a committee key + Chaum-Pedersen proof of correct partial decryption) over BN254 G1. no_std; the refine-side verify + the offchain committee ops share this crate."
+
+[dependencies]
+ark-bn254 = { version = "0.5", default-features = false, features = ["curve"] }
+ark-ec = { version = "0.5", default-features = false }
+ark-ff = { version = "0.5", default-features = false }
+ark-serialize = { version = "0.5", default-features = false }
+ark-std = { version = "0.5", default-features = false }
+blake2 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+# host tests get std automatically

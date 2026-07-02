@@ -167,7 +167,15 @@ pub fn encrypt(order: &[u8], joint: &G1Affine, seed: &[u8]) -> ([u8; POINT_LEN],
 pub fn partial_decrypt(c1_bytes: &[u8], member: &Member, seed: &[u8]) -> Option<[u8; PARTIAL_LEN]> {
     let c1 = de_point(c1_bytes)?;
     let s_i = (c1.into_group() * member.sk).into_affine();
-    let w = scalar_from(b"vdec-w", seed);
+    // Bind the Chaum-Pedersen nonce w to (sk, C1, seed): reusing w across two statements with
+    // different challenges leaks sk (z = w + e·sk). Deriving from sk + this ciphertext makes w
+    // unique per (member, ciphertext) even under a constant caller seed. (Mirrors jamswap
+    // crates/vdec.)
+    let mut wseed = Vec::with_capacity(SCALAR_LEN + POINT_LEN + seed.len());
+    wseed.extend_from_slice(&ser_scalar(&member.sk));
+    wseed.extend_from_slice(&ser_point(&c1));
+    wseed.extend_from_slice(seed);
+    let w = scalar_from(b"vdec-w", &wseed);
     let t1 = (g() * w).into_affine();
     let t2 = (c1.into_group() * w).into_affine();
     let e = challenge(&member.pk, &c1, &s_i, &t1, &t2);
